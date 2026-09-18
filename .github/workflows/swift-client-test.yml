@@ -1,0 +1,64 @@
+name: Swift client Test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'clients/swift/**'
+      - 'Package.swift'
+      - '.github/workflows/swift-client-test.yml'
+  pull_request:
+    paths:
+      - 'clients/swift/**'
+      - 'Package.swift'
+      - '.github/workflows/swift-client-test.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: swift-client-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Show the toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      # The package targets iOS and macCatalyst, so there is no macOS destination to build for:
+      # the tests need a simulator, and the runner's iPhone list changes with every image.
+      - name: Pick an iPhone simulator
+        id: simulator
+        run: |
+          udid=$(xcrun simctl list devices available --json \
+            | jq -r '[.devices[][] | select(.name | startswith("iPhone"))] | last | .udid')
+          if [ -z "$udid" ] || [ "$udid" = "null" ]; then
+            echo "no iPhone simulator on this runner" >&2
+            xcrun simctl list devices available >&2
+            exit 1
+          fi
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+          xcrun simctl list devices available | grep "$udid"
+
+      - name: Test
+        run: |
+          xcodebuild test \
+            -scheme VapoliaAnalytics \
+            -destination "id=${{ steps.simulator.outputs.udid }}" \
+            -resultBundlePath TestResults.xcresult
+
+      - name: Upload the test bundle
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: swift-test-results
+          path: TestResults.xcresult
+          retention-days: 7

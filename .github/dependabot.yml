@@ -1,0 +1,43 @@
+version: 2
+
+updates:
+  # The action versions in .github/workflows. Grouped to get max one PR per month
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ['*']
+    commit-message:
+      prefix: ci
+
+  - package-ecosystem: npm
+    directory: /clients/js
+    schedule:
+      interval: monthly
+    groups:
+      js:
+        patterns: ['*']
+    commit-message:
+      prefix: js
+
+  - package-ecosystem: gradle
+    directory: /clients/kotlin
+    schedule:
+      interval: monthly
+    groups:
+      kotlin:
+        patterns: ['*']
+    commit-message:
+      prefix: kotlin
+
+  - package-ecosystem: nuget
+    directory: /clients/dotnet
+    schedule:
+      interval: monthly
+    groups:
+      dotnet:
+        patterns: ['*']
+    commit-message:
+      prefix: dotnet

@@ -1,0 +1,105 @@
+{
+  "name": "@vapolia/analytics",
+  "version": "1.0.0",
+  "description": "Expo / React Native client for the Vapolia audience-measurement collector.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vapolia/analytics-clients.git",
+    "directory": "clients/js"
+  },
+  "homepage": "https://github.com/vapolia/analytics-clients/tree/main/clients/js#readme",
+  "keywords": [
+    "analytics",
+    "expo",
+    "react-native",
+    "privacy"
+  ],
+  "main": "./lib/commonjs/index.js",
+  "module": "./lib/module/index.js",
+  "types": "./lib/typescript/commonjs/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./lib/typescript/module/index.d.ts",
+        "default": "./lib/module/index.js"
+      },
+      "require": {
+        "types": "./lib/typescript/commonjs/index.d.ts",
+        "default": "./lib/commonjs/index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "src",
+    "!**/__tests__",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "bob build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "prepack": "bob build"
+  },
+  "peerDependencies": {
+    "@react-native-async-storage/async-storage": "*",
+    "expo-application": "*",
+    "expo-background-task": "*",
+    "expo-device": "*",
+    "expo-localization": "*",
+    "expo-task-manager": "*",
+    "react-native": "*"
+  },
+  "peerDependenciesMeta": {
+    "expo-application": {
+      "optional": true
+    },
+    "expo-background-task": {
+      "optional": true
+    },
+    "expo-device": {
+      "optional": true
+    },
+    "expo-localization": {
+      "optional": true
+    },
+    "expo-task-manager": {
+      "optional": true
+    }
+  },
+  "react-native-builder-bob": {
+    "source": "src",
+    "output": "lib",
+    "targets": [
+      [
+        "commonjs",
+        {
+          "esm": true
+        }
+      ],
+      [
+        "module",
+        {
+          "esm": true
+        }
+      ],
+      "typescript"
+    ]
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@react-native-async-storage/async-storage": "^3.1.1",
+    "@types/node": "^22.20.2",
+    "@types/react": "^19.3.0",
+    "react-native": "^0.87.1",
+    "react-native-builder-bob": "^0.43.1",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
+  }
+}

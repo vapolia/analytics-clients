@@ -1,0 +1,69 @@
+name: .NET client Test
+
+# The iOS/macCatalyst build needs a macOS runner at $0.062/min, so it is not run on every push — see the mobile job's condition.
+on:
+#  push:
+#    branches: [main]
+#    paths:
+#      - 'clients/dotnet/**'
+#      - '.github/workflows/dotnet-client-test.yml'
+#  pull_request:
+#    paths:
+#      - 'clients/dotnet/**'
+#      - '.github/workflows/dotnet-client-test.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dotnet-client-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CLIENT: clients/dotnet/Vapolia.Analytics.Client/Vapolia.Analytics.Client.csproj
+  ASPNETCORE: clients/dotnet/Vapolia.Analytics.Client.AspNetCore/Vapolia.Analytics.Client.AspNetCore.csproj
+  TESTS: clients/dotnet/Vapolia.Analytics.Client.Tests/Vapolia.Analytics.Client.Tests.csproj
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build the core and the ASP.NET Core package
+        run: |
+          dotnet build $CLIENT -f net10.0 -c Release
+          dotnet build $ASPNETCORE -c Release
+
+      # MTP: run the test project, do not `dotnet test` it.
+      - name: Test
+        run: dotnet run --project $TESTS -c Release
+
+      - name: Build the Android and Windows targets
+        run: |
+          dotnet workload install android --skip-sign-check
+          dotnet build $CLIENT -f net10.0-android -c Release
+          # net10.0-windows carries no Windows SDK projection, so it builds here as well as anywhere.
+          dotnet build $CLIENT -f net10.0-windows -c Release
+
+  mobile:
+    # Only when asked: the Apple targets need macOS, billed ten times Linux.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - run: dotnet workload install ios maccatalyst --skip-sign-check
+      - run: dotnet build $CLIENT -f net10.0-ios -c Release
+      - run: dotnet build $CLIENT -f net10.0-maccatalyst -c Release

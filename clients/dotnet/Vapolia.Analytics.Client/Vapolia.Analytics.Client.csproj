@@ -1,0 +1,61 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- The app half: MAUI and native mobile, plus a Windows head, on the platform TFMs. Plain net10.0
+         carries the core alone, which is what Vapolia.Analytics.Client.AspNetCore builds the server
+         side on. The platform targets use the platform APIs directly rather than MAUI Essentials, so
+         the package pulls in no MAUI dependency and builds with the android/ios workloads alone. -->
+    <TargetFrameworks>net10.0;net10.0-android;net10.0-ios;net10.0-maccatalyst;net10.0-windows</TargetFrameworks>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">15.0</SupportedOSPlatformVersion>
+
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsTrimmable>true</IsTrimmable>
+    <IsAotCompatible Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == ''">true</IsAotCompatible>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PackageId>Vapolia.Analytics.Client</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Vapolia</Authors>
+    <Description>Client for the Vapolia audience-measurement collector: MAUI, Android, iOS and Windows apps. For Blazor and ASP.NET Core, add Vapolia.Analytics.Client.AspNetCore.</Description>
+    <PackageTags>analytics;privacy;blazor;maui</PackageTags>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageProjectUrl>https://github.com/vapolia/analytics-clients</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/vapolia/analytics-clients</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="../README.md" Pack="true" PackagePath="/" />
+    <None Include="../LICENSE" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
+  </ItemGroup>
+
+  <!-- The installation identity, the device probe and the lifecycle hooks belong to an app running on
+       a device. Plain net10.0 is the core alone, which is what Vapolia.Analytics.Client.AspNetCore
+       builds the server side on; a MAUI Windows app resolves net10.0-windows and gets the app half. -->
+  <ItemGroup>
+    <Compile Remove="Mobile/**" Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == ''" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The queue, the sanitizer, the encoder and the spool are internal; the tests exercise them
+         directly rather than through a public surface built for them. -->
+    <InternalsVisibleTo Include="Vapolia.Analytics.Client.Tests" />
+    <InternalsVisibleTo Include="Vapolia.Analytics.Client.AspNetCore" />
+  </ItemGroup>
+
+</Project>

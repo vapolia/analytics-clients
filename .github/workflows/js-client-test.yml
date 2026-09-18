@@ -1,0 +1,48 @@
+name: JS client Test
+
+# Tests and build.
+# a tag push matches no `paths` filter, so the two cannot share a workflow.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'clients/js/**'
+      - '.github/workflows/js-client-test.yml'
+  pull_request:
+    paths:
+      - 'clients/js/**'
+      - '.github/workflows/js-client-test.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: js-client-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: clients/js
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: clients/js/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm typecheck
+      - run: pnpm build

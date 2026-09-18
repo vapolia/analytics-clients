@@ -1,0 +1,84 @@
+name: Kotlin client Publish
+
+# Releases com.vapolia.analytics:analytics to Maven Central.
+#
+# Publish a GitHub release whose tag is the version, which must match VERSION_NAME in
+# gradle.properties:
+#   gh release create kotlin-v1.0.1 --title "Kotlin client 1.0.1" --notes "..."
+#
+# Maven Central has no notion of a pre-release, so a beta is a SNAPSHOT: tick "Set as a pre-release"
+# and name it kotlin-v1.1.0-SNAPSHOT. publishToMavenCentral routes any -SNAPSHOT version to the
+# Central Portal's snapshots repository instead of staging a release, which is what keeps the number
+# reusable — a released version is immutable and spent for good. Consumers of a snapshot must declare
+# that repository themselves; see clients/kotlin/README.md.
+#
+# SNAPSHOTs have to be enabled once for the namespace, in the Central Portal: the three dots next to
+# com.vapolia, "Enable SNAPSHOTs".
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kotlin-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    # A release event carries no tag filter, unlike a tag push, so every client's workflow wakes on
+    # every release of this repository. This is what keeps each one to its own.
+    if: startsWith(github.event.release.tag_name, 'kotlin-v')
+
+    env:
+      TAG: ${{ github.event.release.tag_name }}
+      PRERELEASE: ${{ github.event.release.prerelease }}
+
+    defaults:
+      run:
+        working-directory: clients/kotlin
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Check the tag against VERSION_NAME
+        run: |
+          declared=$(grep '^VERSION_NAME=' gradle.properties | cut -d= -f2)
+          tagged="${TAG#kotlin-v}"
+          if [ "$declared" != "$tagged" ]; then
+            echo "tag $TAG says $tagged, gradle.properties says $declared" >&2
+            exit 1
+          fi
+
+          # The mistake this catches is a release staged into Central under a number that can never be
+          # reissued, or a snapshot that nobody resolving the release repository will ever see.
+          case "$declared" in *-SNAPSHOT) snapshot=true ;; *) snapshot=false ;; esac
+          if [ "$PRERELEASE" != "$snapshot" ]; then
+            echo "the release is marked prerelease=$PRERELEASE, and $declared is a SNAPSHOT: $snapshot" >&2
+            echo "a pre-release is published as 1.1.0-SNAPSHOT; a release must not be one" >&2
+            exit 1
+          fi
+          echo "publishing $declared"
+
+      # A version is published once and cannot be taken back, so the tests run here too rather than
+      # trusting that the build workflow saw this exact commit.
+      - name: Test
+        run: ./gradlew :analytics:testDebugUnitTest --console=plain
+
+      - name: Publish
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_IN_MEMORY_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_IN_MEMORY_KEY_PASSWORD }}
+        run: ./gradlew publishToMavenCentral --no-configuration-cache --console=plain

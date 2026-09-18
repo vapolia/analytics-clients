@@ -1,0 +1,10 @@
+bin/
+obj/
+*.user
+.idea/
+
+# SwiftPM / Xcode, for the Swift client whose manifest sits at the root.
+.build/
+.swiftpm/
+DerivedData/
+*.xcresult
