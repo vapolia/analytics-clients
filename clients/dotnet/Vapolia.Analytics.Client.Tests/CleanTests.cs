@@ -1,5 +1,3 @@
-using Vapolia.Analytics.Client;
-
 namespace Vapolia.Analytics.Client.Tests;
 
 [TestClass]
@@ -8,11 +6,11 @@ public class CleanTests
     [TestMethod]
     public void TextTrimsCapsAndStripsControlCharacters()
     {
-        Assert.AreEqual("hello", Clean.Text("  hello  ", 64));
-        Assert.AreEqual("ab", Clean.Text("a\0b", 64));
+        Assert.AreEqual("hello", Clean.Text("  hello  ", 64).ToString());
+        Assert.AreEqual("ab", Clean.Text("a\0b", 64).ToString());
         Assert.AreEqual(64, Clean.Text(new string('x', 100), 64)!.Length);
-        Assert.IsNull(Clean.Text("   ", 64));
-        Assert.IsNull(Clean.Text(null, 64));
+        Assert.IsEmpty(Clean.Text("   ", 64).ToString());
+        Assert.IsEmpty(Clean.Text(null, 64).ToString());
     }
 
     [TestMethod]

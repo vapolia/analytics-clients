@@ -6,10 +6,7 @@ first; a mobile app never carries an ASP.NET Core dependency.
 
 ## TL;DR
 
-One call on either host:
-
 ```csharp
-// MauiProgram, Program.cs — same method, same name
 builder.Services.AddAnalytics(o =>
 {
     o.Source = "<sourceName>";

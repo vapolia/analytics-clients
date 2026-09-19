@@ -37,16 +37,11 @@ static class Preferences
 
     public static void Remove(string key) => Store.RemoveObject(key);
 #else
-    // Desktop (Windows, and anything else this package is compiled for): one small file in the
-    // per-user application data. An in-memory store would reissue the id at every launch, which is
-    // the one thing an installation id may not do.
-    static readonly Lock FileGate = new();
+    // Desktop (Windows, and anything else this package is compiled for): one small file in the per-user application data
     static Dictionary<string, string>? cache;
+    static readonly Lock FileGate = new();
 
-    static string Path =>
-        System.IO.Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "vapolia-analytics-identity.json");
+    static string Path => System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"vapolia-analytics-identity.json");
 
     public static string? Get(string key)
     {
@@ -85,7 +80,7 @@ static class Preferences
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
         {
-            // An unreadable store is an empty one: measurement never fails an app.
+            // ignore
         }
 
         return cache ??= new(StringComparer.Ordinal);

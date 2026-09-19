@@ -125,12 +125,7 @@ public static class MobileAnalytics
     }
 
     /// <summary>
-    /// The flush no app should have to place, and the lifecycle it would otherwise re-subscribe to.
-    ///
-    /// No event is emitted here: an event name belongs to the source's whitelist, and a client that
-    /// invents one sends something the collector may drop without a word. What the app needs to name
-    /// its own opens is <see cref="Lifecycle"/> and
-    /// <see cref="MobileInstallIdentityProvider.IsFirstRun"/>.
+    /// Auto flush when the app is backgrounded
     /// </summary>
     static void Bootstrap(Sender started, AnalyticsOptions options)
         => AppLifecycle.Subscribe(

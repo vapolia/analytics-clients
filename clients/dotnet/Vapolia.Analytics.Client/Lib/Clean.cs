@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text;
 
 namespace Vapolia.Analytics.Client;
@@ -15,39 +16,41 @@ static class Clean
     /// <summary>Batch-context keys kept, mirroring the collector's own ceiling.</summary>
     public const int MaxContextKeys = 12;
     public const int MaxValueLength = 64;
-    public const int MaxAgeBucketLength = 12;
 
     /// <summary>How far back the collector accepts a timestamp. Older events are dropped, not sent.</summary>
     public static readonly TimeSpan MaxEventAge = TimeSpan.FromDays(7);
 
+    private static readonly SearchValues<char> ControlChars = SearchValues.Create(
+        "\0\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000A\u000B\u000C\u000D\u000E\u000F" +
+        "\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001A\u001B\u001C\u001D\u001E\u001F" +
+        "\u007F\u0080\u0081\u0082\u0083\u0084\u0085\u0086\u0087\u0088\u0089\u008A\u008B\u008C\u008D\u008E" +
+        "\u008F\u0090\u0091\u0092\u0093\u0094\u0095\u0096\u0097\u0098\u0099\u009A\u009B\u009C\u009D\u009E\u009F");
+
     /// <summary>
-    /// Trims, caps the length, strips control characters, and turns blank into null. The control pass
-    /// is not cosmetic: Postgres rejects U+0000 in text and jsonb.
+    /// Trims, caps the length, strips control characters
     /// </summary>
-    public static string? Text(string? value, int maxLength)
+    public static ReadOnlySpan<char> Text(ReadOnlySpan<char> value, int maxLength)
     {
-        if (string.IsNullOrWhiteSpace(value))
-            return null;
+        value = value.Trim();
+        if (value.IsEmpty || maxLength <= 0) 
+            return ReadOnlySpan<char>.Empty;
 
-        var trimmed = value.Trim();
-        if (trimmed.Length > maxLength)
-            trimmed = trimmed[..maxLength];
-
-        StringBuilder? cleaned = null;
-        for (var i = 0; i < trimmed.Length; i++)
+        if (value.Length > maxLength) 
+            value = value[..maxLength];
+        
+        var index = value.IndexOfAny(ControlChars);
+        if (index < 0) 
+            return value.ToString();
+        
+        var sb = new StringBuilder(value.Length);
+        sb.Append(value[..index]);
+        for (var i = index + 1; i < value.Length; i++)
         {
-            var c = trimmed[i];
-            if (!char.IsControl(c))
-            {
-                cleaned?.Append(c);
-                continue;
-            }
-
-            cleaned ??= new StringBuilder(trimmed.Length).Append(trimmed, 0, i);
+            if (!ControlChars.Contains(value[i])) 
+                sb.Append(value[i]);
         }
 
-        var result = cleaned?.ToString().Trim() ?? trimmed;
-        return result.Length == 0 ? null : result;
+        return sb.ToString().AsSpan().Trim();
     }
 
     /// <summary>
@@ -81,29 +84,23 @@ static class Clean
             return null;
 
         var kept = new Dictionary<string, PropValue>(StringComparer.Ordinal);
-        // Sorted so that what survives the cap does not depend on the dictionary's order — and, for a
-        // batch context, so the same context always serialises identically and groups as one batch.
-        foreach (var key in props.Keys.Order(StringComparer.Ordinal))
+        foreach (var key in props.Keys)
         {
             if (kept.Count == maxKeys)
                 break;
 
             switch (props[key])
             {
-                case string s when Text(s, MaxValueLength) is { } cleaned:
-                    kept[key] = PropValue.From(cleaned);
+                case string s when Text(s, MaxValueLength) is { IsEmpty: false } cleaned:
+                    kept[key] = PropValue.From(cleaned.ToString());
+                    break;
+                case Enum e when Text(e.ToString(), MaxValueLength) is { IsEmpty: false } named:
+                    kept[key] = PropValue.From(named.ToString());
                     break;
                 case bool b:
                     kept[key] = PropValue.From(b);
                     break;
-                // Before the numeric case, which would otherwise store the ordinal of an int-backed
-                // enum: the name is what a query filters on, never a number whose meaning changes the
-                // day someone reorders the enum.
-                case Enum e when Text(e.ToString(), MaxValueLength) is { } named:
-                    kept[key] = PropValue.From(named);
-                    break;
-                // NaN and the infinities are not representable in jsonb, and one of them would fail
-                // the insert for the whole batch.
+                // NaN and the infinities are not representable in jsonb
                 case IConvertible c and (sbyte or byte or short or ushort or int or uint or long or ulong or float or double or decimal):
                     var number = c.ToDouble(null);
                     if (double.IsFinite(number))

@@ -9,33 +9,28 @@ namespace Vapolia.Analytics.Client;
 public static class AnalyticsServiceCollectionExtensions
 {
     /// <summary>
-    /// The whole integration:
+    /// Configure and enable the collection of analytics events.
+    /// </summary>
+    /// <remarks>
+    /// Registers <see cref="IAnalytics"/>, <see cref="IAnalyticsOptOut"/> and <see cref="IInstallIdentityProvider"/>. 
+    /// If <see cref="AnalyticsOptions.Enabled"/> is false or if the source is missing, it registers <see cref="NullAnalytics"/>.
     ///
+    /// <see cref="IAnalyticsContext"/> is queried once when posting a batch of events.
+    /// To use your own HttpClient, set <see cref="AnalyticsOptions.CreateHttpClient"/>.
+    /// You can hook into analytics lifecycle events by injecting <see cref="IAppLifecycle"/> and/or <see cref="IInstallIdentityProvider"/>.
+    /// </remarks>
+    /// <example>
     /// <code>
     /// builder.Services.AddAnalytics(o => o.Source = "&lt;sourceName&gt;");
     /// </code>
-    ///
-    /// Registers <see cref="IAnalytics"/>, <see cref="IAnalyticsOptOut"/> and
-    /// <see cref="IInstallIdentityProvider"/>. The client starts the first time one of them is
-    /// resolved.
-    ///
-    /// With <see cref="AnalyticsOptions.Enabled"/> false, or no source, what is registered is
-    /// <see cref="NullAnalytics"/>: the same call sites, nothing collected, no <c>#if</c> here.
-    ///
-    /// An <see cref="IAnalyticsContext"/> in the container is picked up and asked for the batch
-    /// context on every event. To give the sender your own HttpClient — from an IHttpClientFactory or
-    /// anywhere else — set <see cref="AnalyticsOptions.CreateHttpClient"/>.
-    ///
-    /// Nothing is tracked for you: inject <see cref="IAppLifecycle"/> and
-    /// <see cref="IInstallIdentityProvider"/> and name your own opens.
-    /// </summary>
+    /// </example>
     public static IServiceCollection AddAnalytics(this IServiceCollection services, Action<AnalyticsOptions> configure)
     {
         services.AddOptions<AnalyticsOptions>().Configure(configure);
 
         services.TryAddSingleton<IAnalytics>(provider => MobileAnalytics.Start(
             provider.GetRequiredService<IOptions<AnalyticsOptions>>().Value,
-            provider.GetService<ILoggerFactory>()?.CreateLogger("Vapolia.Analytics.Client"),
+            provider.GetService<ILoggerFactory>()?.CreateLogger(typeof(AnalyticsServiceCollectionExtensions).Namespace!),
             provider.GetService<IAnalyticsContext>(),
             timeZone: provider.GetService<IAnalyticsTimeZone>()));
 

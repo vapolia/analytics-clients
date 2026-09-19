@@ -57,44 +57,17 @@ static class AppLifecycle
     public static void Subscribe(Action onForeground, Action onBackground)
     {
         if (enteredBackground is not null)
-            return;
+            throw new ArgumentException("AppLifecycle.Subscribe should not be called more than once", nameof(onForeground));
 
         var center = Foundation.NSNotificationCenter.DefaultCenter;
-        enteredBackground = center.AddObserver(
-            UIKit.UIApplication.DidEnterBackgroundNotification, _ => onBackground());
+        enteredBackground = center.AddObserver(UIKit.UIApplication.DidEnterBackgroundNotification, _ => onBackground());
         // Not DidBecomeActive, which also fires after a phone call or a pulled-down notification centre.
-        willEnterForeground = center.AddObserver(
-            UIKit.UIApplication.WillEnterForegroundNotification, _ => onForeground());
+        willEnterForeground = center.AddObserver(UIKit.UIApplication.WillEnterForegroundNotification, _ => onForeground());
     }
 #else
     public static void Subscribe(Action onForeground, Action onBackground)
     {
-        // A desktop app is never backgrounded the way a phone is: the host's shutdown is the flush.
+        // A desktop app is never backgrounded the way a phone is
     }
 #endif
-}
-
-sealed class AppLifecycleEvents : IAppLifecycle
-{
-    public event Action? Foreground;
-    public event Action? Background;
-
-    // A handler that throws is the app's bug, and it must not cost the flush that follows it.
-    public void RaiseForeground() => Raise(Foreground);
-    public void RaiseBackground() => Raise(Background);
-
-    static void Raise(Action? handlers)
-    {
-        foreach (var handler in handlers?.GetInvocationList() ?? [])
-        {
-            try
-            {
-                ((Action)handler)();
-            }
-            catch
-            {
-                // Swallowed: measurement never fails an app, and there is no logger here.
-            }
-        }
-    }
 }

@@ -6,7 +6,7 @@ namespace Vapolia.Analytics.Client;
 /// </summary>
 public sealed class AnalyticsOptions
 {
-    /// <summary>The app's name: the URL segment, and the Postgres schema it maps to</summary>
+    /// <summary>The app's registered name</summary>
     public string Source { get; set; } = "";
 
     /// <summary>The collector's base URL, e.g. "https://analytics.example.com". The source is appended to it.</summary>

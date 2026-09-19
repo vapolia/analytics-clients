@@ -15,7 +15,7 @@ sealed class Analytics(
         var eventName = Clean.Text(name, Clean.MaxValueLength);
         var device = identity.GetDevice().Cleaned(options?.ExcludedCountries);
 
-        if (installId is null || eventName is null || device is null)
+        if (installId is null || eventName.IsEmpty || device is null)
         {
             sender.Reject();
             return;
@@ -26,7 +26,7 @@ sealed class Analytics(
 
         sender.Track(new Pending(
             new BatchKey(installId, device, CurrentContext()),
-            new Event(eventName, now.ToUniversalTime(), Clean.Props(props), OffsetOf(local))));
+            new Event(eventName.ToString(), now.ToUniversalTime(), Clean.Props(props), OffsetOf(local))));
     }
 
     /// <summary>
