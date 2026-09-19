@@ -7,13 +7,22 @@ first; a mobile app never carries an ASP.NET Core dependency.
 ## TL;DR
 
 ```csharp
+// MAUI, Android, iOS, Windows: UseAnalytics on the builder is the whole setup
+builder.UseAnalytics(o =>
+{
+    o.Source = "<sourceName>";
+    o.Endpoint = "https://analytics.example.com";
+});
+```
+
+```csharp
+// Blazor / ASP.NET Core: same AddAnalytics, plus the middleware early, before the endpoints
 builder.Services.AddAnalytics(o =>
 {
     o.Source = "<sourceName>";
     o.Endpoint = "https://analytics.example.com";
 });
 
-// a Blazor or ASP.NET Core app also places the middleware, early, before the endpoints
 app.UseAnalytics();
 ```
 
@@ -88,7 +97,7 @@ queued, nothing is stored, no `#if` at the call sites. It is also the only way t
 measuring: left enabled, a missing `Source` or `Endpoint` throws rather than going quiet.
 
 ```csharp
-builder.Services.AddAnalytics(o =>
+builder.UseAnalytics(o =>
 {
     o.Source = "<sourceName>";
 #if DEBUG
@@ -275,8 +284,9 @@ The client also does two things about it on its own:
 
 | | |
 |---|---|
-| `AddAnalytics(o => …)` | Registers `IAnalytics`, `IAnalyticsOptOut` and `IInstallIdentityProvider` — on both hosts, under the same name. |
-| `UseAnalytics()` | ASP.NET Core only: ensures the identity cookie exists before anything renders. |
+| `builder.UseAnalytics(o => …)` | Mobile: registers `IAnalytics`, `IAnalyticsOptOut` and `IInstallIdentityProvider` on an `IHostApplicationBuilder` — `MauiAppBuilder` implements it, so no MAUI dependency is needed. |
+| `services.AddAnalytics(o => …)` | Same registration, on `IServiceCollection` directly — for a mobile app with a container but no `IHostApplicationBuilder` at hand, and what the server's `AddAnalytics` also calls. |
+| `app.UseAnalytics()` | ASP.NET Core only: ensures the identity cookie exists before anything renders. |
 | `IAnalytics.Track(name, props?)` | `IReadOnlyDictionary<string, object?>` or `params (string, object?)[]`. Scalars only: string (≤64 chars), finite number, bool — and **enums, stored by name**. Max 12 per event. |
 | `IAnalytics.FlushAsync(ct)` | Sends what is queued and waits. |
 | `IAnalytics.Stats` | `Accepted` / `Rejected` / `Dropped` / `Sent` / `Requests`. |

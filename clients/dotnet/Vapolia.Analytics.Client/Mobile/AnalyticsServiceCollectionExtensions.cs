@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -12,7 +13,7 @@ public static class AnalyticsServiceCollectionExtensions
     /// Configure and enable the collection of analytics events.
     /// </summary>
     /// <remarks>
-    /// Registers <see cref="IAnalytics"/>, <see cref="IAnalyticsOptOut"/> and <see cref="IInstallIdentityProvider"/>. 
+    /// Registers <see cref="IAnalytics"/>, <see cref="IAnalyticsOptOut"/> and <see cref="IInstallIdentityProvider"/>.
     /// If <see cref="AnalyticsOptions.Enabled"/> is false or if the source is missing, it registers <see cref="NullAnalytics"/>.
     ///
     /// <see cref="IAnalyticsContext"/> is queried once when posting a batch of events.
@@ -21,9 +22,19 @@ public static class AnalyticsServiceCollectionExtensions
     /// </remarks>
     /// <example>
     /// <code>
-    /// builder.Services.AddAnalytics(o => o.Source = "&lt;sourceName&gt;");
+    /// builder.UseAnalytics(o => o.Source = "&lt;sourceName&gt;");
     /// </code>
     /// </example>
+    public static IHostApplicationBuilder UseAnalytics(this IHostApplicationBuilder builder, Action<AnalyticsOptions> configure)
+    {
+        builder.Services.AddAnalytics(configure);
+        return builder;
+    }
+
+    /// <summary>
+    /// Same registration as <see cref="UseAnalytics(IHostApplicationBuilder, Action{AnalyticsOptions})"/>,
+    /// for an app that only has an <see cref="IServiceCollection"/> to hand — no <see cref="IHostApplicationBuilder"/>.
+    /// </summary>
     public static IServiceCollection AddAnalytics(this IServiceCollection services, Action<AnalyticsOptions> configure)
     {
         services.AddOptions<AnalyticsOptions>().Configure(configure);
@@ -34,13 +45,8 @@ public static class AnalyticsServiceCollectionExtensions
             provider.GetService<IAnalyticsContext>(),
             timeZone: provider.GetService<IAnalyticsTimeZone>()));
 
-        // Resolving the client is what starts it; the identity is whatever that produced.
         services.TryAddSingleton<IInstallIdentityProvider>(provider => (IInstallIdentityProvider?)Started(provider) ?? NullAnalytics.Instance);
-
         services.TryAddSingleton<IAnalyticsOptOut>(provider => (IAnalyticsOptOut?)Started(provider) ?? NullAnalytics.Instance);
-
-        // What an app subscribes to in order to name its own opens, without re-subscribing to the
-        // platform the client is already watching.
         services.TryAddSingleton(MobileAnalytics.Lifecycle);
 
         return services;
