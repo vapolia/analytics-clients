@@ -271,18 +271,12 @@ It needs a trusted-publishing policy on nuget.org
 
 ### Pre-releases
 
-**TODO**: update the gh workflow to automatically set the version in the csproj using msbuild's /t
-
 ```bash
-# bump <Version> in both csproj, commit, then
 gh release create dotnet-v1.1.0-beta.1 --prerelease --title "dotnet client 1.1.0-beta.1" --notes "..."
 ```
 
 ### Releases
 
-**TODO**: update the gh workflow to automatically set the version in the csproj using msbuild's /t
-
 ```bash
-# bump <Version> in both csproj, commit, then
 gh release create dotnet-v1.0.1 --title "dotnet client 1.0.1" --notes "..."
 ```

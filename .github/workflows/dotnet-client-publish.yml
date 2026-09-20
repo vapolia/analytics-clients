@@ -54,26 +54,20 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Check the tag against the csproj
+      - name: Derive the version from the tag
         run: |
-          declared=$(grep -oE '<Version>[^<]+' $CLIENT | head -1 | cut -d'>' -f2)
-          server=$(grep -oE '<Version>[^<]+' $ASPNETCORE | head -1 | cut -d'>' -f2)
-          tagged="${TAG#dotnet-v}"
-          # The two packages ship as one version.
-          if [ "$declared" != "$tagged" ] || [ "$server" != "$tagged" ]; then
-            echo "tag $TAG says $tagged, csprojs say $declared and $server" >&2
-            exit 1
-          fi
+          version="${TAG#dotnet-v}"
 
           # nuget.org is immutable: a version pushed is a version spent, so a beta published without
           # its suffix cannot be taken back and reissued as the stable one.
-          case "$declared" in *-*) suffixed=true ;; *) suffixed=false ;; esac
+          case "$version" in *-*) suffixed=true ;; *) suffixed=false ;; esac
           if [ "$PRERELEASE" != "$suffixed" ]; then
-            echo "the release is marked prerelease=$PRERELEASE, and $declared has a suffix: $suffixed" >&2
+            echo "the release is marked prerelease=$PRERELEASE, and $version has a suffix: $suffixed" >&2
             echo "a pre-release needs a suffix (1.1.0-beta.1); a release must not carry one" >&2
             exit 1
           fi
-          echo "publishing $declared"
+          echo "publishing $version"
+          echo "VERSION=$version" >> "$GITHUB_ENV"
 
       - run: dotnet workload install android ios maccatalyst --skip-sign-check
 
@@ -82,10 +76,11 @@ jobs:
         run: dotnet run --project $TESTS -c Release
 
       # Two packages: the app half, and the ASP.NET Core half that depends on it.
+      # /p:Version overrides the <Version> in the csproj, so the tag is the single source of truth.
       - name: Pack
         run: |
-          dotnet pack $CLIENT -c Release -o artifacts
-          dotnet pack $ASPNETCORE -c Release -o artifacts
+          dotnet pack $CLIENT -c Release -o artifacts /p:Version=$VERSION
+          dotnet pack $ASPNETCORE -c Release -o artifacts /p:Version=$VERSION
 
       - name: NuGet login OIDC
         id: login
