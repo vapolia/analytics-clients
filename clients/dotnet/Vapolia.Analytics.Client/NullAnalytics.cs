@@ -7,7 +7,7 @@ namespace Vapolia.Analytics.Client;
 /// It exists so a DEBUG build, or a build with no endpoint configured, needs no <c>#if</c> and no
 /// second implementation at the call sites.
 /// </summary>
-public sealed class NullAnalytics : IAnalytics, IAnalyticsOptOut, IInstallIdentityProvider
+public sealed class NullAnalytics : IAnalytics, IInstallContext
 {
     /// <summary>The one instance; it holds nothing.</summary>
     public static readonly NullAnalytics Instance = new();
@@ -30,10 +30,7 @@ public sealed class NullAnalytics : IAnalytics, IAnalyticsOptOut, IInstallIdenti
     ///
     /// Kept in memory only — a client that measures nothing has nowhere to write it.
     /// </summary>
-    public bool OptedOut { get; private set; }
-
-    /// <inheritdoc/>
-    public void SetOptedOut(bool value) => OptedOut = value;
+    public bool OptedOut { get; set; }
 
     /// <inheritdoc/>
     public string? GetInstallId() => null;

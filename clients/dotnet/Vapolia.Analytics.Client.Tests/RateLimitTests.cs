@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging.Abstractions;
-using Vapolia.Analytics.Client;
 
 namespace Vapolia.Analytics.Client.Tests;
 
@@ -27,10 +26,12 @@ public class RateLimitTests
 
     static AnalyticsOptions Options(int maxPerWindow) => new()
     {
-        Source = "testsource",
-        FlushInterval = TimeSpan.FromHours(1),
-        MaxEventsPerWindow = maxPerWindow,
-        RateWindow = TimeSpan.FromMinutes(1),
+        IngestionUrl = new Uri("https://localhost/testsource"),
+        AdvancedOptions = {
+            FlushInterval = TimeSpan.FromHours(1),
+            MaxEventsPerWindow = maxPerWindow,
+            RateWindow = TimeSpan.FromMinutes(1),
+        }
     };
 
     [TestMethod]

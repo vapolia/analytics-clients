@@ -1,17 +1,19 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 
 namespace Vapolia.Analytics.Client;
 
 /// <summary>
-/// What survives the process going away — a phone reclaiming a backgrounded app, or a server restart.
-///
-/// Events are read back once: <see cref="Load"/> deletes the file. A duplicated event is a wrong
-/// count, while a lost one is only a missing count, so the ambiguity is resolved towards losing.
+/// Persists/Restores a list of events in a local file.
+/// Truncate the list to the capacity.
 /// </summary>
-sealed class Spool(string path, int capacity)
+sealed class PersistPendingItemsToLocalStorageHelper(string path, int capacity, ILogger? logger)
 {
     const int CurrentVersion = 1;
 
+    /// <summary>
+    /// Persists the items to a local file
+    /// </summary>
     public void Save(IReadOnlyList<Pending> items)
     {
         if (items.Count == 0)
@@ -29,7 +31,7 @@ sealed class Spool(string path, int capacity)
             var file = new SpoolFile
             {
                 Version = CurrentVersion,
-                // Beyond the cap the oldest are kept: they are the ones a restart is meant to recover.
+                // Beyond the cap only the oldest items are kept
                 Items = items.Take(capacity).Select(p => new SpoolItem
                 {
                     InstallId = p.Key.InstallId,
@@ -42,23 +44,27 @@ sealed class Spool(string path, int capacity)
                 }).ToList(),
             };
 
-            var temporary = path + ".tmp";
-            File.WriteAllText(temporary, JsonSerializer.Serialize(file, AnalyticsJsonContext.Default.SpoolFile));
-            File.Move(temporary, path, overwrite: true);
+            File.WriteAllText(path, JsonSerializer.Serialize(file, AnalyticsJsonContext.Default.SpoolFile));
         }
-        catch
+        catch(Exception e)
         {
-            // Nothing to do about it, and nothing a caller could do either.
+            logger?.LogError(e, "Failed to write spool file {path}", path);
         }
     }
 
+    /// <summary>
+    /// Restores the items from a local file
+    /// </summary>
+    /// <remarks>
+    /// The file is deleted immediately after loading
+    /// </remarks>
     public IReadOnlyList<Pending> Load()
     {
+        if (!File.Exists(path))
+            return [];
+
         try
         {
-            if (!File.Exists(path))
-                return [];
-
             var content = File.ReadAllText(path);
             Clear();
 
@@ -80,24 +86,27 @@ sealed class Spool(string path, int capacity)
 
             return result;
         }
-        catch
+        catch(Exception e)
         {
-            // A truncated or older file is a process killed mid-write; not worth a recovery path.
+            logger?.LogWarning(e, "Ignoring unreadable spool file {path}", path);
             Clear();
             return [];
         }
     }
 
-    public void Clear()
+    /// <summary>
+    /// Deletes the local file.
+    /// </summary>
+    void Clear()
     {
         try
         {
             if (File.Exists(path))
                 File.Delete(path);
         }
-        catch
+        catch(Exception e)
         {
-            // Same as above.
+            logger?.LogError(e, "Failed to delete spool file {path}", path);
         }
     }
 }

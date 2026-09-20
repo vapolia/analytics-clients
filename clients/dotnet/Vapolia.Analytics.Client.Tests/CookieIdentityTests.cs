@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
-using Vapolia.Analytics.Client;
 
 namespace Vapolia.Analytics.Client.Tests;
 
@@ -14,14 +13,14 @@ public class CookieIdentityTests
         string? acceptLanguage = null,
         bool optedOut = false)
     {
-        var options = new AnalyticsOptions { Source = "testsource" };
+        var options = new AnalyticsOptions { IngestionUrl = new Uri("https://localhost/testsource") };
         var context = new DefaultHttpContext();
 
         var cookies = new List<string>();
         if (cookie is not null)
-            cookies.Add($"{options.CookieName}={cookie}");
+            cookies.Add($"{options.WebOptions.CookieName}={cookie}");
         if (optedOut)
-            cookies.Add($"{options.OptOutCookieName}=1");
+            cookies.Add($"{options.WebOptions.OptOutCookieName}=1");
         if (cookies.Count > 0)
             context.Request.Headers.Cookie = string.Join("; ", cookies);
 
@@ -99,7 +98,7 @@ public class CookieIdentityTests
         var (provider, context) = Create(cookie: InstallId);
         Assert.AreEqual(InstallId, provider.GetInstallId());
 
-        provider.SetOptedOut(true);
+        provider.OptedOut = true;
 
         var setCookie = context.Response.Headers.SetCookie.ToString();
         Assert.IsTrue(setCookie.Contains("_vau_off=1", StringComparison.Ordinal), setCookie);
@@ -112,7 +111,7 @@ public class CookieIdentityTests
     {
         var (provider, context) = Create(optedOut: true);
 
-        provider.SetOptedOut(false);
+        provider.OptedOut = false;
 
         var setCookie = context.Response.Headers.SetCookie.ToString();
         Assert.IsTrue(setCookie.Contains("_vau_off=;", StringComparison.Ordinal), setCookie);

@@ -14,8 +14,8 @@ sealed class Sender : IAsyncDisposable
     readonly record struct Command(Pending? Item, TaskCompletionSource? Ack, bool Persist);
 
     readonly AnalyticsOptions options;
-    readonly IPoster poster;
-    readonly Spool? spool;
+    readonly IPublishHelper publishHelper;
+    readonly PersistPendingItemsToLocalStorageHelper? spool;
     readonly ILogger logger;
     readonly TimeProvider time;
 
@@ -30,15 +30,15 @@ sealed class Sender : IAsyncDisposable
     DateTimeOffset windowStart;
     int windowCount;
 
-    public Sender(AnalyticsOptions options, IPoster poster, Spool? spool, ILogger logger, TimeProvider? time = null)
+    public Sender(AnalyticsOptions options, IPublishHelper publishHelper, PersistPendingItemsToLocalStorageHelper? spool, ILogger logger, TimeProvider? time = null)
     {
         this.options = options;
-        this.poster = poster;
+        this.publishHelper = publishHelper;
         this.spool = spool;
         this.logger = logger;
         this.time = time ?? TimeProvider.System;
 
-        channel = Channel.CreateBounded<Command>(new BoundedChannelOptions(options.QueueCapacity)
+        channel = Channel.CreateBounded<Command>(new BoundedChannelOptions(options.AdvancedOptions.QueueCapacity)
         {
             // Never block a caller: Track uses TryWrite and counts the refusal itself.
             FullMode = BoundedChannelFullMode.Wait,
@@ -66,7 +66,7 @@ sealed class Sender : IAsyncDisposable
             return;
         }
 
-        if (Volatile.Read(ref held) >= options.QueueCapacity || !channel.Writer.TryWrite(new Command(pending, null, false)))
+        if (Volatile.Read(ref held) >= options.AdvancedOptions.QueueCapacity || !channel.Writer.TryWrite(new Command(pending, null, false)))
         {
             // Full queue: the collector is unreachable, or slower than we emit.
             Interlocked.Increment(ref dropped);
@@ -98,7 +98,7 @@ sealed class Sender : IAsyncDisposable
             Interlocked.Increment(ref held);
         }
 
-        using var timer = new PeriodicTimer(options.FlushInterval, time);
+        using var timer = new PeriodicTimer(options.AdvancedOptions.FlushInterval, time);
 
         // Both tasks are hoisted out of the loop and only recreated once they have completed: a fresh
         // WaitToReadAsync on every tick would leave a continuation behind on a channel that is never
@@ -130,7 +130,7 @@ sealed class Sender : IAsyncDisposable
                     if (command.Item is { } pending)
                     {
                         Buffer(buffers, pending);
-                        if (buffers[pending.Key].Count >= options.BatchSize)
+                        if (buffers[pending.Key].Count >= options.AdvancedOptions.BatchSize)
                             await SendGroupAsync(buffers, pending.Key).ConfigureAwait(false);
                         continue;
                     }
@@ -192,9 +192,9 @@ sealed class Sender : IAsyncDisposable
         if (!buffers.Remove(key, out var events))
             return;
 
-        for (var index = 0; index < events.Count; index += options.BatchSize)
+        for (var index = 0; index < events.Count; index += options.AdvancedOptions.BatchSize)
         {
-            var chunk = events.GetRange(index, Math.Min(options.BatchSize, events.Count - index));
+            var chunk = events.GetRange(index, Math.Min(options.AdvancedOptions.BatchSize, events.Count - index));
             var kept = await SendAsync(key, chunk).ConfigureAwait(false);
             if (kept.Count == 0)
                 continue;
@@ -208,10 +208,9 @@ sealed class Sender : IAsyncDisposable
     /// <summary>Sends one group and accounts for it. Returns the events to try again later, if any.</summary>
     async Task<List<Event>> SendAsync(BatchKey key, List<Event> events)
     {
-        // A send started as the app goes to the background is killed mid-request unless the platform
-        // has been told to hold the process. The app supplies that scope; this client knows no native API.
+        // A send started as the app goes to the background is killed mid-request unless the platform has been told to hold the process.
         IAsyncDisposable? scope = null;
-        if (options.BackgroundScope is { } open)
+        if (options.AppOptions.BackgroundScope is { } open)
         {
             try
             {
@@ -256,7 +255,7 @@ sealed class Sender : IAsyncDisposable
             SendResult result;
             try
             {
-                result = await poster.PostAsync(body, stopping.Token).ConfigureAwait(false);
+                result = await publishHelper.PostAsync(body, stopping.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -278,7 +277,7 @@ sealed class Sender : IAsyncDisposable
                     return [];
 
                 default:
-                    if (attempt >= options.MaxAttempts || stopping.IsCancellationRequested)
+                    if (attempt >= options.AdvancedOptions.MaxAttempts || stopping.IsCancellationRequested)
                     {
                         // Kept, not dropped: a failed send usually means no network.
                         logger.LogWarning("analytics: keeping {Count} events: {Reason}", fresh.Count, result.Reason);
@@ -311,27 +310,27 @@ sealed class Sender : IAsyncDisposable
     /// </summary>
     bool WithinRate()
     {
-        if (options.MaxEventsPerWindow <= 0)
+        if (options.AdvancedOptions.MaxEventsPerWindow <= 0)
             return true;
 
         var now = time.GetUtcNow();
         lock (rateGate)
         {
-            if (now - windowStart >= options.RateWindow)
+            if (now - windowStart >= options.AdvancedOptions.RateWindow)
             {
                 windowStart = now;
                 windowCount = 0;
             }
 
-            if (windowCount >= options.MaxEventsPerWindow)
+            if (windowCount >= options.AdvancedOptions.MaxEventsPerWindow)
             {
                 // Once per window, not per dropped event: a saturated window is one fact. Silence
                 // here is how a chatty tutorial session is discovered months later, in the numbers.
-                if (windowCount == options.MaxEventsPerWindow)
+                if (windowCount == options.AdvancedOptions.MaxEventsPerWindow)
                 {
                     windowCount++;
                     logger.LogWarning("analytics: rate window full, dropping until it ends");
-                    Report(null, $"client rate window full ({options.MaxEventsPerWindow} per {options.RateWindow})", permanent: false);
+                    Report(null, $"client rate window full ({options.AdvancedOptions.MaxEventsPerWindow} per {options.AdvancedOptions.RateWindow})", permanent: false);
                 }
 
                 return false;
@@ -345,7 +344,7 @@ sealed class Sender : IAsyncDisposable
     /// <summary>Next to the log, for an app that reports losses somewhere of its own.</summary>
     void Report(Exception? exception, string reason, bool permanent)
     {
-        if (options.OnError is not { } report)
+        if (options.AdvancedOptions.OnError is not { } report)
             return;
 
         try

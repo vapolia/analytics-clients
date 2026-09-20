@@ -13,12 +13,12 @@ public static class AnalyticsServiceCollectionExtensions
     /// Configure and enable the collection of analytics events.
     /// </summary>
     /// <remarks>
-    /// Registers <see cref="IAnalytics"/>, <see cref="IAnalyticsOptOut"/> and <see cref="IInstallIdentityProvider"/>.
+    /// Registers <see cref="IAnalytics"/>, <see cref="IInstallContext"/>.
     /// If <see cref="AnalyticsOptions.Enabled"/> is false or if the source is missing, it registers <see cref="NullAnalytics"/>.
     ///
     /// <see cref="IAnalyticsContext"/> is queried once when posting a batch of events.
     /// To use your own HttpClient, set <see cref="AnalyticsOptions.CreateHttpClient"/>.
-    /// You can hook into analytics lifecycle events by injecting <see cref="IAppLifecycle"/> and/or <see cref="IInstallIdentityProvider"/>.
+    /// You can hook into analytics lifecycle events by injecting <see cref="IAppLifecycle"/> and/or <see cref="IInstallContext"/>.
     /// </remarks>
     /// <example>
     /// <code>
@@ -45,8 +45,7 @@ public static class AnalyticsServiceCollectionExtensions
             provider.GetService<IAnalyticsContext>(),
             timeZone: provider.GetService<IAnalyticsTimeZone>()));
 
-        services.TryAddSingleton<IInstallIdentityProvider>(provider => (IInstallIdentityProvider?)Started(provider) ?? NullAnalytics.Instance);
-        services.TryAddSingleton<IAnalyticsOptOut>(provider => (IAnalyticsOptOut?)Started(provider) ?? NullAnalytics.Instance);
+        services.TryAddSingleton<IInstallContext>(provider => (IInstallContext?)Started(provider) ?? NullAnalytics.Instance);
         services.TryAddSingleton(MobileAnalytics.Lifecycle);
 
         return services;

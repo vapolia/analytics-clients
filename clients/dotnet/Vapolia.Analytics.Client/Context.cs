@@ -55,19 +55,20 @@ public static class InstallAge
 }
 
 /// <summary>
-/// The time zone of whoever the event is about, asked for at every event. A server has no time zone of its visitors on its own —
-/// no HTTP header carries one — so knowing it is the site's business, from a cookie a script set for instance. Register this,
-/// scoped, to hand it over. On mobile the client supplies the device's own zone.
+/// The time zone of whoever the event is about, asked for at every event.
 /// </summary>
+/// <remarks>
+/// A server has no time zone of its visitors on its own: knowing it is the site's business, from a cookie a script set for instance.
+/// Register this, scoped, to hand it over.
+/// 
+/// On mobile the client supplies the device's own zone.
+/// </remarks>
 public interface IAnalyticsTimeZone
 {
     /// <summary>
-    /// The instant <paramref name="at"/> as that person reads it on their own clock, or null when unknown. A zone is converted
-    /// rather than an offset computed, and the client keeps the offset of what comes back: an instant has exactly one local
-    /// reading, while a wall-clock time falls twice on the day DST ends.
-    ///
-    /// Only the instant carries meaning here — the offset <paramref name="at"/> arrives with is the calling machine's, which on a
-    /// server is the data centre's. Convert it (<c>TimeZoneInfo.ConvertTime</c>, <c>ToOffset</c>), never read its wall clock.
+    /// Converts 
     /// </summary>
-    DateTimeOffset? GetLocalTime(DateTimeOffset at);
+    /// <param name="utcTimestamp">The SDK timestamp of an event</param>
+    /// <returns>the real timestamp of that event</returns>
+    DateTimeOffset? GetLocalTime(DateTimeOffset utcTimestamp);
 }

@@ -1,9 +1,7 @@
-using Vapolia.Analytics.Client;
-
 namespace Vapolia.Analytics.Client.Tests;
 
 [TestClass]
-public class SpoolTests
+public class PersistPendingItemsToLocalStorageHelperTests
 {
     string path = "";
 
@@ -33,7 +31,7 @@ public class SpoolTests
     [TestMethod]
     public void RoundTripsEventsDeviceContextIncluded()
     {
-        var spool = new Spool(path, 10);
+        var spool = new PersistPendingItemsToLocalStorageHelper(path, 10, null);
         var items = new[] { Item("app_open"), Item("game_end") };
 
         spool.Save(items);
@@ -53,7 +51,7 @@ public class SpoolTests
     [TestMethod]
     public void IsReadOnlyOnce()
     {
-        var spool = new Spool(path, 10);
+        var spool = new PersistPendingItemsToLocalStorageHelper(path, 10, null);
         spool.Save([Item("app_open")]);
 
         Assert.AreEqual(1, spool.Load().Count);
@@ -64,7 +62,7 @@ public class SpoolTests
     [TestMethod]
     public void SavingNothingClearsTheFile()
     {
-        var spool = new Spool(path, 10);
+        var spool = new PersistPendingItemsToLocalStorageHelper(path, 10, null);
         spool.Save([Item("app_open")]);
 
         spool.Save([]);
@@ -75,7 +73,7 @@ public class SpoolTests
     [TestMethod]
     public void ATruncatedFileYieldsNothing()
     {
-        var spool = new Spool(path, 10);
+        var spool = new PersistPendingItemsToLocalStorageHelper(path, 10, null);
         spool.Save([Item("app_open"), Item("game_end")]);
         var bytes = File.ReadAllBytes(path);
         File.WriteAllBytes(path, bytes[..(bytes.Length / 2)]);
@@ -87,12 +85,24 @@ public class SpoolTests
     [TestMethod]
     public void CapacityKeepsTheOldestEvents()
     {
-        var spool = new Spool(path, 2);
+        var spool = new PersistPendingItemsToLocalStorageHelper(path, 2, null);
 
         spool.Save([Item("first"), Item("second"), Item("third")]);
 
         CollectionAssert.AreEqual(
             new[] { "first", "second" },
             spool.Load().Select(i => i.Event.Name).ToArray());
+    }
+    
+    
+    [TestMethod]
+    public void TheSpoolKeepsTheOffset()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"tz-spool-{Guid.NewGuid():N}.json");
+        var spool = new PersistPendingItemsToLocalStorageHelper(path, 10,  null);
+
+        spool.Save([new Pending(new BatchKey("11111111-0000-0000-0000-000011111111", new Device { Country = "FR" }), new Event("app_open", DateTimeOffset.UtcNow, null, 120))]);
+
+        Assert.AreEqual(120, spool.Load()[0].Event.Tz);
     }
 }

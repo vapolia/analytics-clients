@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -11,9 +10,9 @@ namespace Vapolia.Analytics.Client;
 /// <summary>Wires the client into an ASP.NET Core or Blazor app.</summary>
 public static class AnalyticsServiceCollectionExtensions
 {
+    const string HttpClientName = "vapolia.analytics";
+    
     /// <summary>
-    /// The whole integration, the same call a mobile app makes:
-    ///
     /// <code>
     /// builder.Services.AddAnalytics(o => o.Source = "&lt;sourceName&gt;");
     /// ...
@@ -32,46 +31,40 @@ public static class AnalyticsServiceCollectionExtensions
             // A server speaks for every visitor, so the per-client ceiling that protects a phone from
             // itself would throttle a whole site here. Runs before the caller's own configuration,
             // which can still set it back.
-            .Configure(o => o.MaxEventsPerWindow = 0)
+            .Configure(o => o.AdvancedOptions.MaxEventsPerWindow = 0)
             .Configure(configure)
-            .Validate(o => !o.Enabled || !string.IsNullOrWhiteSpace(o.Source), "AnalyticsOptions.Source is required")
-            .Validate(o => !o.Enabled || Uri.TryCreate(o.Endpoint, UriKind.Absolute, out _),
-                "AnalyticsOptions.Endpoint is required: the collector's absolute base URL, e.g. \"https://analytics.example.com\"");
+            .Validate(o => !o.Enabled || !o.IngestionUrl.IsAbsoluteUri, $"{nameof(AnalyticsOptions)}.{nameof(AnalyticsOptions.IngestionUrl)} is required and must be an absolute URL");
 
         services.AddHttpContextAccessor();
         services.TryAddScoped<CookieInstallIdentityProvider>();
-        services.TryAddScoped<IInstallIdentityProvider>(p => Enabled(p)
-            ? p.GetRequiredService<CookieInstallIdentityProvider>()
-            : NullAnalytics.Instance);
-        // Injected by a settings page to offer the refusal: the same scoped instance, so what it
-        // writes is what the identity reads.
-        services.TryAddScoped<IAnalyticsOptOut>(p => Enabled(p)
+        services.TryAddScoped<IInstallContext>(p => Enabled(p)
             ? p.GetRequiredService<CookieInstallIdentityProvider>()
             : NullAnalytics.Instance);
 
         services.AddHttpClient(HttpClientName, (provider, http) =>
         {
             var options = provider.GetRequiredService<IOptions<AnalyticsOptions>>().Value;
-            http.Timeout = options.RequestTimeout;
+            http.Timeout = options.AdvancedOptions.RequestTimeout;
         });
 
         services.TryAddSingleton(provider =>
         {
             var options = provider.GetRequiredService<IOptions<AnalyticsOptions>>().Value;
             var http = provider.GetRequiredService<IHttpClientFactory>().CreateClient(HttpClientName);
-            var url = $"{options.Endpoint.TrimEnd('/')}/{options.Source.Trim('/')}";
 
             return new Sender(
                 options,
-                new HttpPoster(http, url, options.ApiKey),
-                options.SpoolPath is { Length: > 0 } path ? new Spool(path, options.SpoolCapacity) : null,
+                new HttpPublishHelper(http, options.IngestionUrl, options.ApiKey),
+                options.AdvancedOptions.SpoolPath is { Length: > 0 } path ? 
+                    new PersistPendingItemsToLocalStorageHelper(path, options.AdvancedOptions.SpoolCapacity, provider.GetService<ILoggerFactory>()?.CreateLogger<PersistPendingItemsToLocalStorageHelper>()) 
+                    : null,
                 provider.GetRequiredService<ILogger<IAnalytics>>());
         });
 
         services.TryAddScoped<IAnalytics>(provider => Enabled(provider)
             ? new Analytics(
                 provider.GetRequiredService<Sender>(),
-                provider.GetRequiredService<IInstallIdentityProvider>(),
+                provider.GetRequiredService<IInstallContext>(),
                 provider.GetService<IAnalyticsContext>(),
                 provider.GetRequiredService<IOptions<AnalyticsOptions>>().Value,
                 provider.GetService<IAnalyticsTimeZone>())
@@ -87,17 +80,14 @@ public static class AnalyticsServiceCollectionExtensions
     /// cookie can be set and the visit goes unmeasured.
     /// </summary>
     public static IApplicationBuilder UseAnalytics(this IApplicationBuilder app)
-        => app.Use(async (HttpContext context, RequestDelegate next) =>
+        => app.Use(async (context, next) =>
         {
-            context.RequestServices.GetRequiredService<IInstallIdentityProvider>().GetInstallId();
+            context.RequestServices.GetRequiredService<IInstallContext>().GetInstallId();
             await next(context);
         });
 
     static bool Enabled(IServiceProvider provider)
-        => provider.GetRequiredService<IOptions<AnalyticsOptions>>().Value is
-            { Enabled: true, Source.Length: > 0, Endpoint.Length: > 0 };
-
-    internal const string HttpClientName = "vapolia.analytics";
+        => provider.GetRequiredService<IOptions<AnalyticsOptions>>().Value is { Enabled: true, IngestionUrl.IsAbsoluteUri: true };
 }
 
 /// <summary>

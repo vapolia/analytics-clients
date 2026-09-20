@@ -21,7 +21,7 @@
     <Authors>Vapolia</Authors>
     <Description>Blazor and ASP.NET Core side of the Vapolia audience-measurement client: server-side emission, first-party cookie identity, no script in the page.</Description>
     <PackageTags>analytics;privacy;blazor;aspnetcore</PackageTags>
-    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
     <PackageProjectUrl>https://github.com/vapolia/analytics-clients</PackageProjectUrl>
     <RepositoryUrl>https://github.com/vapolia/analytics-clients</RepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -31,7 +31,7 @@
 
   <ItemGroup>
     <None Include="../README.md" Pack="true" PackagePath="/" />
-    <None Include="../LICENSE" Pack="true" PackagePath="/" />
+    <None Include="../LICENSE.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 
   <ItemGroup>

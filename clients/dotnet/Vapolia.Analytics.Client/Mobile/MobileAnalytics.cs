@@ -44,51 +44,39 @@ public static class MobileAnalytics
     /// </summary>
     public static IAppLifecycle Lifecycle => lifecycle;
 
-    /// <summary>Starts the sender. Calling it twice keeps the first configuration.</summary>
-    /// <param name="options">At least <see cref="AnalyticsOptions.Source"/>.</param>
+    /// <summary>Starts the sender. Cannot be called twice.</summary>
+    /// <param name="options">At least <see cref="AnalyticsOptions.IngestionUrl"/>.</param>
     /// <param name="logger">Where transport failures go. Nothing is logged when null.</param>
     /// <param name="context">Asked for the batch context on every event.</param>
-    /// <param name="http">An HttpClient to reuse. One is created when null.</param>
+    /// <param name="httpClient">An HttpClient to reuse. One is created when null.</param>
     /// <param name="timeZone">Whose clock the events are dated against. The device's own when null.</param>
     /// <returns>The client, the same instance as <see cref="Current"/>.</returns>
     public static IAnalytics Start(
         AnalyticsOptions options,
         ILogger? logger = null,
         IAnalyticsContext? context = null,
-        HttpClient? http = null,
+        HttpClient? httpClient = null,
         IAnalyticsTimeZone? timeZone = null)
     {
         lock (Gate)
         {
-            if (current is not null)
-                return current;
-
-            // Turned off in this build: one no-op registration rather than an #if at every call site.
             if (!options.Enabled)
                 return NullAnalytics.Instance;
 
-            // Enabled but incomplete is a mistake, not a choice — silently doing nothing would look
-            // like an app nobody uses. Not measuring is said with Enabled = false.
-            if (string.IsNullOrWhiteSpace(options.Source))
-                throw new InvalidOperationException($"{nameof(AnalyticsOptions)}.{nameof(AnalyticsOptions.Source)} is required.");
-            if (!Uri.TryCreate(options.Endpoint, UriKind.Absolute, out _))
-                throw new InvalidOperationException(
-                    $"{nameof(AnalyticsOptions)}.{nameof(AnalyticsOptions.Endpoint)} must be the collector's absolute base URL, "
-                    + $"e.g. \"https://analytics.example.com\" (got \"{options.Endpoint}\").");
+            if (current is not null)
+                return current;
 
-            // A client the app supplies keeps the app's own timeout; only the one made here gets ours.
-            var client = http ?? options.CreateHttpClient?.Invoke() ?? new HttpClient { Timeout = options.RequestTimeout };
-            var url = $"{options.Endpoint.TrimEnd('/')}/{options.Source.Trim('/')}";
+            if (!options.IngestionUrl.IsAbsoluteUri)
+                throw new InvalidOperationException($"Invalid {nameof(AnalyticsOptions)}.{nameof(AnalyticsOptions.IngestionUrl)}: must be an absolute URL '{options.IngestionUrl}'");
 
-            options.SpoolPath ??= Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                $"vapolia-analytics-{options.Source}.json");
+            httpClient ??= options.AdvancedOptions.CreateHttpClient?.Invoke() ?? new HttpClient { Timeout = options.AdvancedOptions.RequestTimeout };
+            options.AdvancedOptions.SpoolPath ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "vapolia-analytics-spool.json");
 
             var identity = new MobileInstallIdentityProvider(options);
             var started = new Sender(
                 options,
-                new HttpPoster(client, url, options.ApiKey),
-                new Spool(options.SpoolPath, options.SpoolCapacity),
+                new HttpPublishHelper(httpClient, options.IngestionUrl, options.ApiKey),
+                new (options.AdvancedOptions.SpoolPath, options.AdvancedOptions.SpoolCapacity, logger),
                 logger ?? NullLogger.Instance);
 
             sender = started;
@@ -133,7 +121,7 @@ public static class MobileAnalytics
             onBackground: () =>
             {
                 lifecycle.RaiseBackground();
-                if (options.AutoFlushOnBackground)
+                if (options.AppOptions.AutoFlushOnBackground)
                     _ = started.FlushAsync(persist: true);
             });
 }

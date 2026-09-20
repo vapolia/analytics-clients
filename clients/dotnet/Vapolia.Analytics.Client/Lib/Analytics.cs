@@ -2,7 +2,7 @@ namespace Vapolia.Analytics.Client;
 
 sealed class Analytics(
     Sender sender,
-    IInstallIdentityProvider identity,
+    IInstallContext identity,
     IAnalyticsContext? context = null,
     AnalyticsOptions? options = null,
     IAnalyticsTimeZone? timeZone = null) : IAnalytics
@@ -21,12 +21,12 @@ sealed class Analytics(
             return;
         }
 
-        var now = DateTimeOffset.Now;
+        var now = DateTimeOffset.UtcNow;
         var local = timeZone?.GetLocalTime(now);
 
         sender.Track(new Pending(
             new BatchKey(installId, device, CurrentContext()),
-            new Event(eventName.ToString(), now.ToUniversalTime(), Clean.Props(props), OffsetOf(local))));
+            new Event(eventName.ToString(), now, Clean.Props(props), OffsetOf(local))));
     }
 
     /// <summary>

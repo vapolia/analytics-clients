@@ -1,33 +1,32 @@
 # .NET client
 
-Two packages, one client: **`Vapolia.Analytics.Client`** for MAUI, Android, iOS and Windows apps, and
-**`Vapolia.Analytics.Client.AspNetCore`** for Blazor and ASP.NET Core servers. The second depends on the
-first; a mobile app never carries an ASP.NET Core dependency.
+Nugets:
+- `Vapolia.Analytics.Client` for standalone apps (MAUI, Android, iOS, Windows apps)
+- `Vapolia.Analytics.Client.AspNetCore` for web apps (Blazor and ASP.NET Core)
 
 ## TL;DR
 
-```csharp
-// MAUI, Android, iOS, Windows: UseAnalytics on the builder is the whole setup
+### Setup
+```c#
+// Standalone apps 
 builder.UseAnalytics(o =>
 {
-    o.Source = "<sourceName>";
-    o.Endpoint = "https://analytics.example.com";
+    o.IngestionUrl = "https://analytics.example.com/<sourceName>";
 });
 ```
 
-```csharp
-// Blazor / ASP.NET Core: same AddAnalytics, plus the middleware early, before the endpoints
+```c#
+// Web apps (Blazor / ASP.NET Core)
 builder.Services.AddAnalytics(o =>
 {
-    o.Source = "<sourceName>";
-    o.Endpoint = "https://analytics.example.com";
+    o.IngestionUrl = "https://analytics.example.com/<sourceName>";
 });
 
 app.UseAnalytics();
 ```
 
+### Usage
 ```csharp
-// anywhere, injected
 public sealed class GameViewModel(IAnalytics analytics)
 {
     public void Finish(Difficulty difficulty) => analytics.Track("game_end", ("difficulty", difficulty));
@@ -111,7 +110,7 @@ one event. It changes while the app runs, and an event must carry the state it w
 so the client asks rather than caches:
 
 ```csharp
-sealed class GameAnalyticsContext(IUserState state, IInstallIdentityProvider identity) : IAnalyticsContext
+sealed class GameAnalyticsContext(IUserState state, IInstallContext identity) : IAnalyticsContext
 {
     public IReadOnlyDictionary<string, object?> GetContext() => new Dictionary<string, object?>
     {
@@ -194,24 +193,23 @@ Two consequences worth understanding before you ship it:
 | **Country** | From `Accept-Language`, which is the visitor's own browser setting. **Never** from IP geolocation — the collector forbids it and stores no IP. The user agent is not parsed either: guessing a device class from it is fingerprinting for a column nobody reads. |
 | **Opposition** | A second cookie, `_vau_off`. When it is there, no id is read and none is written — the visitor is simply not measured. Unlike the identifier it **is** refreshed on each visit: extending a refusal serves the person, extending an identifier does not. |
 
-The right of opposition is an obligation, not an option: the exemption holds only if the visitor can
-refuse. Inject `IAnalyticsOptOut` in a settings page and call it before the response is written:
+Right of opposition: Inject `IInstallContext` and set OptedOut to true.
 
 ```csharp
-@inject IAnalyticsOptOut OptOut
+@inject IInstallContext OptOut
 
-<input type="checkbox" checked="@(!OptOut.OptedOut)" @onchange="e => OptOut.SetOptedOut(!(bool)e.Value!)" />
+<input type="checkbox" checked="@(!OptOut.OptedOut)" @onchange="e => OptOut.OptedOut = !(bool)e.Value!" />
 ```
 
 On mobile the same interface is injected, or reached through `MobileAnalytics.Identity`.
 
 This only holds for **server-rendered** Blazor. In a WebAssembly app the code runs in the browser: the
-call to `analytics.example.com` would be visible in the devtools, and the id would need `localStorage`. An
-event triggered by a click in the browser — a QR reveal, a tap on a store badge — has no server render
-to ride on; there is no endpoint here that a script could post to yet.
+call to `analytics.example.com` would be visible in the devtools, and the id would need `localStorage`. 
+An event triggered by a click in the browser — a QR reveal, a tap on a store badge — has no server render to ride on; 
+there is no endpoint here that a script could post to yet.
 
-`UseAnalytics()` must run before the response starts — a cookie cannot be set afterwards. If it is too
-late, the visit is simply not measured: one missed hit, never a wrong one.
+`UseAnalytics()` must run before the response starts — a cookie cannot be set afterwards. 
+If it is too late, the visit is simply not measured.
 
 ### The time zone of a visitor
 
@@ -273,7 +271,7 @@ an expired one shows up at once instead of being discovered through throttling.
 The client also does two things about it on its own:
 
 - **It buffers.** `FlushInterval` defaults to 30 s, so a session costs a handful of requests rather
-  than one per event — the same interval as the Kotlin, Swift and JS clients.
+  than one per event — the same interval as the Kotlin, Swift, and JS clients.
 - **It has its own ceiling, on the app side only.** `MaxEventsPerWindow` (30) caps what one
   installation may emit per minute; past it everything is dropped until the window ends, rather than
   queued for a collector that would throttle the whole address. A full window is logged and reported
@@ -284,7 +282,7 @@ The client also does two things about it on its own:
 
 | | |
 |---|---|
-| `builder.UseAnalytics(o => …)` | Mobile: registers `IAnalytics`, `IAnalyticsOptOut` and `IInstallIdentityProvider` on an `IHostApplicationBuilder` — `MauiAppBuilder` implements it, so no MAUI dependency is needed. |
+| `builder.UseAnalytics(o => …)` | Mobile: registers `IAnalytics` and `IInstallContext` on an `IHostApplicationBuilder` — `MauiAppBuilder` implements it, so no MAUI dependency is needed. |
 | `services.AddAnalytics(o => …)` | Same registration, on `IServiceCollection` directly — for a mobile app with a container but no `IHostApplicationBuilder` at hand, and what the server's `AddAnalytics` also calls. |
 | `app.UseAnalytics()` | ASP.NET Core only: ensures the identity cookie exists before anything renders. |
 | `IAnalytics.Track(name, props?)` | `IReadOnlyDictionary<string, object?>` or `params (string, object?)[]`. Scalars only: string (≤64 chars), finite number, bool — and **enums, stored by name**. Max 12 per event. |
@@ -293,13 +291,12 @@ The client also does two things about it on its own:
 | `IAnalyticsContext.GetContext()` | The batch context, asked for on every event. Keys whitelisted per source under `context:`. |
 | `IAnalyticsTimeZone.GetLocalTime(utc)` | The instant as the visitor reads it on their own clock, per event; the client keeps its offset. On a server no HTTP header carries the zone, so the site supplies it (a cookie set by a script, for instance). Mobile uses the device's own zone. |
 | `InstallAge.Bucket(firstSeen, now)` | `0` / `1-7` / `8-30` / `31-90` / `90+`, for an app that segments on the age of an installation. |
-| `IAnalyticsOptOut` | The right of opposition, on both hosts. Off by default; setting it forgets the id. |
 | `MobileAnalytics.Start/Current/FlushAsync/StopAsync` | The entry point for an app without a container. |
 | `MobileInstallIdentityProvider.Seed(InstallSeed)` | Adopts an existing installation, once. |
 | `MobileInstallIdentityProvider.Update(d => …)` | Corrects the detected country, for an app that reads it better than the region setting. |
 | `IAppLifecycle` | `Foreground` / `Background`, registered by `AddAnalytics`, or `MobileAnalytics.Lifecycle`. |
 | `MobileInstallIdentityProvider.IsFirstRun` | What decides your own `first_open`. |
-| `NullAnalytics.Instance` | The no-op, which `Enabled = false` registers for you. Its opt-out still moves, in memory, so a settings switch bound to `IAnalyticsOptOut` is not stuck in a DEBUG build. |
+| `NullAnalytics.Instance` | The no-op, which `Enabled = false` registers for you.  |
 
 `AnalyticsOptions`: `Source` and `Endpoint` (both required), `Enabled` (true),
 `AutoFlushOnBackground` (true), `AccessToken` (the build token), `ExcludedCountries`, `Context`, `SeedInstallId`, `BackgroundScope`, `OnError`,
@@ -332,7 +329,7 @@ dotnet run --project clients/dotnet/Vapolia.Analytics.Client.Tests/Vapolia.Analy
 
 Tests use MTP, like the collector's own suite — `dotnet run`, not `dotnet test`. They target `net10.0`
 and cover the sanitizer, the encoder, the spool, the send path, the per-window ceiling, the error
-callback and the cookie identity; the platform `#if` branches — the preferences store, the lifecycle
+callback, and the cookie identity; the platform `#if` branches — the preferences store, the lifecycle
 hooks — are not covered by them.
 
 JSON goes through `System.Text.Json` [source

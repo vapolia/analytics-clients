@@ -12,9 +12,7 @@ namespace Vapolia.Analytics.Client;
 ///
 /// It is HttpOnly: no script reads it, which is also why nothing shows up client-side.
 /// </summary>
-public sealed class CookieInstallIdentityProvider(
-    IHttpContextAccessor accessor,
-    IOptions<AnalyticsOptions> options) : IInstallIdentityProvider, IAnalyticsOptOut
+public sealed class CookieInstallIdentityProvider(IHttpContextAccessor accessor, IOptions<AnalyticsOptions> options) : IInstallContext
 {
     readonly AnalyticsOptions options = options.Value;
 
@@ -24,42 +22,34 @@ public sealed class CookieInstallIdentityProvider(
         get
         {
             var context = accessor.HttpContext;
-            return context is not null && context.Request.Cookies[options.OptOutCookieName] == "1";
+            return context is not null && context.Request.Cookies[options.WebOptions.OptOutCookieName] == "1";
         }
-    }
-
-    /// <summary>
-    /// The right of opposition, for a settings page: call it from a handler that has not written its
-    /// response yet.
-    ///
-    /// Opting out drops the identity cookie, so opting back in cannot resume the same installation.
-    /// The opposition cookie itself **is** refreshed on each visit, unlike the identifier: extending
-    /// a refusal serves the person, extending an identifier does not.
-    /// </summary>
-    public void SetOptedOut(bool value)
-    {
-        var context = accessor.HttpContext;
-        if (context is null || context.Response.HasStarted)
-            return;
-
-        if (value)
+        set
         {
-            context.Response.Cookies.Append(options.OptOutCookieName, "1", new CookieOptions
+            var context = accessor.HttpContext;
+            if (context is null || context.Response.HasStarted)
+                return;
+
+            if (value)
             {
-                HttpOnly = true,
-                Secure = true,
-                SameSite = SameSiteMode.Lax,
-                IsEssential = true,
-                Expires = DateTimeOffset.UtcNow.Add(options.OptOutLifetime),
-            });
+                context.Response.Cookies.Append(options.WebOptions.OptOutCookieName, "1", new CookieOptions
+                {
+                    HttpOnly = true,
+                    Secure = true,
+                    SameSite = SameSiteMode.Lax,
+                    IsEssential = true,
+                    Expires = DateTimeOffset.UtcNow.Add(options.AdvancedOptions.OptOutLifetime),
+                });
 
-            context.Response.Cookies.Delete(options.CookieName);
-            context.Items.Remove(ItemKey);
-            return;
+                context.Response.Cookies.Delete(options.WebOptions.CookieName);
+                context.Items.Remove(ItemKey);
+                return;
+            }
+
+            context.Response.Cookies.Delete(options.WebOptions.OptOutCookieName);
         }
-
-        context.Response.Cookies.Delete(options.OptOutCookieName);
     }
+
 
     /// <summary>
     /// Reads the cookie, creating it when the response has not started yet. Called by the middleware
@@ -79,7 +69,7 @@ public sealed class CookieInstallIdentityProvider(
         if (context.Items.TryGetValue(ItemKey, out var cached) && cached is string existing)
             return existing;
 
-        var fromCookie = Clean.InstallId(context.Request.Cookies[options.CookieName]);
+        var fromCookie = Clean.InstallId(context.Request.Cookies[options.WebOptions.CookieName]);
         if (fromCookie is not null)
         {
             context.Items[ItemKey] = fromCookie;
@@ -92,14 +82,14 @@ public sealed class CookieInstallIdentityProvider(
             return null;
 
         var issued = Guid.NewGuid().ToString("D");
-        context.Response.Cookies.Append(options.CookieName, issued, new CookieOptions
+        context.Response.Cookies.Append(options.WebOptions.CookieName, issued, new CookieOptions
         {
             HttpOnly = true,
             Secure = true,
             SameSite = SameSiteMode.Lax,
             IsEssential = true,
             // Absolute, from this moment. Never extended on a later visit.
-            Expires = DateTimeOffset.UtcNow.Add(options.InstallIdLifetime),
+            Expires = DateTimeOffset.UtcNow.Add(options.AdvancedOptions.InstallIdLifetime),
         });
 
         context.Items[ItemKey] = issued;

@@ -63,10 +63,13 @@ public class OnErrorTests
         var losses = new List<(string Reason, bool Permanent)>();
         var options = new AnalyticsOptions
         {
-            Source = "testsource",
-            FlushInterval = TimeSpan.FromHours(1),
-            MaxEventsPerWindow = 0,
-            OnError = (_, reason, permanent) => losses.Add((reason, permanent)),
+            IngestionUrl = new Uri("https://localhost/testsource"),
+            AdvancedOptions =
+            {
+                FlushInterval = TimeSpan.FromHours(1),
+                MaxEventsPerWindow = 0,
+                OnError = (_, reason, permanent) => losses.Add((reason, permanent)),
+            }
         };
 
         var collector = new FakeCollector(SendResult.Permanent("unknown source (404)"));
@@ -86,11 +89,13 @@ public class OnErrorTests
         var losses = new List<(string Reason, bool Permanent)>();
         var options = new AnalyticsOptions
         {
-            Source = "testsource",
-            FlushInterval = TimeSpan.FromHours(1),
-            MaxEventsPerWindow = 0,
-            MaxAttempts = 2,
-            OnError = (_, reason, permanent) => losses.Add((reason, permanent)),
+            IngestionUrl = new Uri("https://localhost/testsource"),
+            AdvancedOptions = {
+                FlushInterval = TimeSpan.FromHours(1),
+                MaxEventsPerWindow = 0,
+                MaxAttempts = 2,
+                OnError = (_, reason, permanent) => losses.Add((reason, permanent)),
+            }
         };
 
         var collector = new FakeCollector(
@@ -112,11 +117,14 @@ public class OnErrorTests
         var reported = new List<Exception?>();
         var options = new AnalyticsOptions
         {
-            Source = "testsource",
-            FlushInterval = TimeSpan.FromHours(1),
-            MaxEventsPerWindow = 0,
-            MaxAttempts = 1,
-            OnError = (exception, _, _) => reported.Add(exception),
+            IngestionUrl = new Uri("https://localhost/testsource"),
+            AdvancedOptions = 
+            {
+                FlushInterval = TimeSpan.FromHours(1),
+                MaxEventsPerWindow = 0,
+                MaxAttempts = 1,
+                OnError = (exception, _, _) => reported.Add(exception),
+            }
         };
 
         var failure = new HttpRequestException("connection refused");
@@ -138,11 +146,14 @@ public class OnErrorTests
         var clock = new MovableClock(DateTimeOffset.UtcNow);
         var options = new AnalyticsOptions
         {
-            Source = "testsource",
-            FlushInterval = TimeSpan.FromHours(1),
-            MaxEventsPerWindow = 2,
-            RateWindow = TimeSpan.FromMinutes(1),
-            OnError = (_, reason, _) => losses.Add(reason),
+            IngestionUrl = new Uri("https://localhost/testsource"),
+            AdvancedOptions = 
+            {
+                FlushInterval = TimeSpan.FromHours(1),
+                MaxEventsPerWindow = 2,
+                RateWindow = TimeSpan.FromMinutes(1),
+                OnError = (_, reason, _) => losses.Add(reason),
+            }
         };
 
         await using var sender = new Sender(options, new FakeCollector(), null, NullLogger.Instance, clock);
@@ -165,10 +176,11 @@ public class BatchContextTests
 {
     const string InstallId = "11111111-0000-0000-0000-000011111111";
 
-    sealed class Identity : IInstallIdentityProvider
+    sealed class Identity : IInstallContext
     {
-        public string? GetInstallId() => InstallId;
+        public string GetInstallId() => InstallId;
         public Device GetDevice() => new() { Country = "FR" };
+        public bool OptedOut { get; set; }
     }
 
     sealed class Context(Func<IReadOnlyDictionary<string, object?>?> current) : IAnalyticsContext
@@ -178,9 +190,11 @@ public class BatchContextTests
 
     static AnalyticsOptions Options() => new()
     {
-        Source = "testsource",
-        FlushInterval = TimeSpan.FromHours(1),
-        MaxEventsPerWindow = 0,
+        IngestionUrl = new Uri("https://localhost/testsource"),
+        AdvancedOptions = {
+            FlushInterval = TimeSpan.FromHours(1),
+            MaxEventsPerWindow = 0,
+        }
     };
 
     [TestMethod]
@@ -255,10 +269,11 @@ public class TimeZoneTests
 {
     const string InstallId = "11111111-0000-0000-0000-000011111111";
 
-    sealed class Identity : IInstallIdentityProvider
+    sealed class Identity : IInstallContext
     {
-        public string? GetInstallId() => InstallId;
+        public string GetInstallId() => InstallId;
         public Device GetDevice() => new() { Country = "FR" };
+        public bool OptedOut { get; set; }
     }
 
     sealed class FixedZone(int? minutes) : IAnalyticsTimeZone
@@ -269,9 +284,11 @@ public class TimeZoneTests
 
     static AnalyticsOptions Options() => new()
     {
-        Source = "testsource",
-        FlushInterval = TimeSpan.FromHours(1),
-        MaxEventsPerWindow = 0,
+        IngestionUrl = new Uri("https://localhost/testsource"),
+        AdvancedOptions = {
+            FlushInterval = TimeSpan.FromHours(1),
+            MaxEventsPerWindow = 0,
+        }
     };
 
     static async Task<System.Text.Json.JsonElement> SendOne(IAnalyticsTimeZone? zone)
@@ -320,16 +337,5 @@ public class TimeZoneTests
         var sent = await SendOne(new FixedZone(-13 * 60));
 
         Assert.IsFalse(sent.TryGetProperty("tz", out _));
-    }
-
-    [TestMethod]
-    public void TheSpoolKeepsTheOffset()
-    {
-        var path = Path.Combine(Path.GetTempPath(), $"tz-spool-{Guid.NewGuid():N}.json");
-        var spool = new Spool(path, 10);
-
-        spool.Save([new Pending(new BatchKey(InstallId, new Device { Country = "FR" }), new Event("app_open", DateTimeOffset.UtcNow, null, 120))]);
-
-        Assert.AreEqual(120, spool.Load()[0].Event.Tz);
     }
 }

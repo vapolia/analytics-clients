@@ -1,11 +1,10 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
-using Vapolia.Analytics.Client;
 
 namespace Vapolia.Analytics.Client.Tests;
 
 /// <summary>The collector, reduced to what a client can observe: the bodies, and what it answered.</summary>
-sealed class FakeCollector(params SendResult[] answers) : IPoster
+sealed class FakeCollector(params SendResult[] answers) : IPublishHelper
 {
     readonly Queue<SendResult> queued = new(answers);
     readonly Lock gate = new();
@@ -37,12 +36,14 @@ public class SenderTests
 
     static AnalyticsOptions Options(int batchSize = 100, int maxAttempts = 3, int queueCapacity = 4000) => new()
     {
-        Source = "testsource",
-        // Long enough that every test flushes explicitly.
-        FlushInterval = TimeSpan.FromHours(1),
-        BatchSize = batchSize,
-        MaxAttempts = maxAttempts,
-        QueueCapacity = queueCapacity,
+        IngestionUrl = new Uri("https://localhost/testsource"),
+        AdvancedOptions = {
+            // Long enough that every test flushes explicitly.
+            FlushInterval = TimeSpan.FromHours(1),
+            BatchSize = batchSize,
+            MaxAttempts = maxAttempts,
+            QueueCapacity = queueCapacity,
+        }
     };
 
     static Pending Item(string name, string installId = InstallId, Device? device = null, DateTimeOffset? ts = null)
@@ -169,7 +170,7 @@ public class SenderTests
         try
         {
             var failing = new FakeCollector(SendResult.Retry(TimeSpan.Zero, "offline"));
-            var first = new Sender(Options(maxAttempts: 1), failing, new Spool(path, 100), NullLogger.Instance);
+            var first = new Sender(Options(maxAttempts: 1), failing, new (path, 100, null), NullLogger.Instance);
             first.Track(Item("game_end"));
             await first.FlushAsync(persist: true);
             await first.DisposeAsync();
@@ -177,7 +178,7 @@ public class SenderTests
             Assert.IsTrue(File.Exists(path), "the queue should have been written down");
 
             var collector = new FakeCollector();
-            await using var restarted = new Sender(Options(), collector, new Spool(path, 100), NullLogger.Instance);
+            await using var restarted = new Sender(Options(), collector, new (path, 100, null), NullLogger.Instance);
             await restarted.FlushAsync();
 
             Assert.AreEqual(1, collector.Bodies.Count);

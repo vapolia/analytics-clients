@@ -25,7 +25,7 @@
     <Authors>Vapolia</Authors>
     <Description>Client for the Vapolia audience-measurement collector: MAUI, Android, iOS and Windows apps. For Blazor and ASP.NET Core, add Vapolia.Analytics.Client.AspNetCore.</Description>
     <PackageTags>analytics;privacy;blazor;maui</PackageTags>
-    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
     <PackageProjectUrl>https://github.com/vapolia/analytics-clients</PackageProjectUrl>
     <RepositoryUrl>https://github.com/vapolia/analytics-clients</RepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -35,7 +35,7 @@
 
   <ItemGroup>
     <None Include="../README.md" Pack="true" PackagePath="/" />
-    <None Include="../LICENSE" Pack="true" PackagePath="/" />
+    <None Include="../LICENSE.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 
   <ItemGroup>

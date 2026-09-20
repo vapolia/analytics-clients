@@ -8,7 +8,7 @@ namespace Vapolia.Analytics.Client;
 /// keychain, which survives the app being deleted and would make the id outlive the installation it
 /// names. Renewing it is the editor's obligation, not the collector's.
 /// </summary>
-public sealed class MobileInstallIdentityProvider : IInstallIdentityProvider, IAnalyticsOptOut
+public sealed class MobileInstallIdentityProvider : IInstallContext
 {
     const string KeyId = "vapolia.analytics.installId";
     const string KeyIssuedAt = "vapolia.analytics.installIdIssuedAt";
@@ -35,14 +35,12 @@ public sealed class MobileInstallIdentityProvider : IInstallIdentityProvider, IA
             lock (gate)
             {
                 Preferences.Set(KeyOptedOut, value ? "true" : "false");
-                if (!value)
-                    return;
-
-                Preferences.Remove(KeyId);
-                Preferences.Remove(KeyIssuedAt);
-                // Forgotten with the id: kept, it would make a refusal into a pause that still
-                // remembers how old the installation is.
-                Preferences.Remove(KeyFirstSeen);
+                if (value)
+                {
+                    Preferences.Remove(KeyId);
+                    Preferences.Remove(KeyIssuedAt);
+                    Preferences.Remove(KeyFirstSeen);
+                }
             }
         }
     }
@@ -66,7 +64,7 @@ public sealed class MobileInstallIdentityProvider : IInstallIdentityProvider, IA
 
             // A device clock moved backwards would otherwise freeze the id: reissue rather than extend.
             var expired = issuedAt is null
-                          || now - issuedAt >= options.InstallIdLifetime
+                          || now - issuedAt >= options.AdvancedOptions.InstallIdLifetime
                           || issuedAt > now.AddDays(1);
 
             if (stored is not null && !expired)
@@ -123,9 +121,6 @@ public sealed class MobileInstallIdentityProvider : IInstallIdentityProvider, IA
             return true;
         }
     }
-
-    /// <summary>Records the refusal, or lifts it. Same as setting <see cref="OptedOut"/>.</summary>
-    public void SetOptedOut(bool value) => OptedOut = value;
 
     /// <summary>
     /// What the device reports about itself: its region setting. Detected once — it does not change
