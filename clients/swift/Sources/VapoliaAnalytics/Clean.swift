@@ -1,8 +1,9 @@
 import Foundation
 
 // Limits mirrored from the collector's EventSanitizer, which applies them again on arrival.
-enum Limits {
-    static let maxEventsPerBatch = 100
+// Public: maxEventsPerBatch is used as a default argument value in AnalyticsConfig's public init.
+public enum Limits {
+    public static let maxEventsPerBatch = 100
     static let maxPropsPerEvent = 12
     /// Batch-context keys kept, mirroring the collector's own ceiling.
     static let maxContextKeys = 12

@@ -1,7 +1,6 @@
 name: JS client Test
 
 # Tests and build.
-# a tag push matches no `paths` filter, so the two cannot share a workflow.
 on:
   push:
     branches: [main]

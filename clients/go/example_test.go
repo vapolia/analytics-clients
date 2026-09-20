@@ -7,7 +7,7 @@ import (
 	analytics "github.com/vapolia/analytics-clients/clients/go"
 )
 
-// A runtime module may create one client at startup and closes it at shutdown. 
+// A runtime module may create one client at startup and closes it at shutdown.
 // The install id and the device context come from the client app.
 func Example() {
 	client, err := analytics.New(analytics.Options{
