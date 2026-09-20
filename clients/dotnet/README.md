@@ -207,8 +207,9 @@ The default is 600 requests per minute per IPv4 address, per pod.
 A website with real traffic will be throttled by default.  
 To avoid this, raise the deployment's rate limit for this kind of source.
 
-For a server, the real answer is a **server key**: `AnalyticsOptions.ApiKey`:  a server token issued by the collector 
-which uses that key to throttle instead of the IP address, with a default max events of 6000/min instead of 600.
+For a server, the real answer is a **server key**: `AnalyticsOptions.Token`, a server token issued by the collector
+which uses it to throttle instead of the IP address, with a default max events of 6000/min instead of 600. The same
+property also carries a build token for a mobile app — the collector tells them apart from the token itself.
 
 ### Other
 

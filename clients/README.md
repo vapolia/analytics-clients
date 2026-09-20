@@ -43,17 +43,17 @@ contract by hand.
    13+ app: PIPA, guardian consent under 14) — globally, or on the source when it needs a list of its own; the app passes
    whichever applies to its client, which then sends nothing from there. The collector enforces it as well; the
    duplication is intentional. No client hardcodes a country.
-9. **A build token carries the platform and the build.** Issued by the collector's admin service to the CI of each build
-   (`POST /tokens/{source}/build`) and embedded in it; sent as `buildToken`, it is now the only thing that names the
-   platform and the build — no client sends them in the body any more. A missing, expired or revoked token is a `401`:
-   that build is no longer measured. A server sends none — its server token names its own os and build.
+9. **One token, one header, for both roles.** Every credential — a server's own key or a build's own token — is sent
+   as `Authorization: Bearer <token>`. The collector tells the two apart from the token's own claims, not from how it
+   arrived, and either one names the platform and the build: no client sends those in the body. A missing, expired or
+   revoked build token is a `401`: that build is no longer measured. Presenting nothing is the regime for an
+   untrusted client, limited by address.
 
 ## Payload
 
 ```json
 {
   "installId": "11111111-0000-0000-0000-000011111111",
-  "buildToken": "eyJhbGciOiJFUzI1NiIsImtpZCI6IjIwMjYtMDkifQ...",
   "country": "FR",
   "context": { "plan": "premium", "tutorial_done": true, "install_age": "8-30" },
   "events": [
@@ -63,7 +63,7 @@ contract by hand.
 }
 ```
 
-Every field but `installId` and `events` is optional — and `installId` too for a server sending under its server token: its events then belong to no installation (`install_id` NULL), and a batch without one and without a token is dropped. The platform and the build come from the token alone. `context` keys are the source's own: the
+Every field but `installId` and `events` is optional — and `installId` too for a server sending under its server token: its events then belong to no installation (`install_id` NULL), and a batch without one and without a token is dropped. The platform and the build come from the `Authorization` token alone, never the body. `context` keys are the source's own: the
 collector stores it as one jsonb column and knows nothing about what is in it. `country` stays top-level because it is
 the axis of the source's `excludedCountries` filter — it is the one thing the body still says about the device.
 Anything a caller wants to add about its own client — a browser and its version, for a server relay — goes in `context`

@@ -57,6 +57,7 @@ object Analytics {
                 url = config.endpoint.trimEnd('/') + "/" + config.source.trim('/'),
                 connectTimeoutMs = config.connectTimeoutMs,
                 readTimeoutMs = config.readTimeoutMs,
+                token = config.token,
             ),
             spool = Spool(File(app.filesDir, SPOOL_FILE), config.spoolCapacity),
         )

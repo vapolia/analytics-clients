@@ -47,10 +47,10 @@ public struct AnalyticsConfig: Sendable {
     public var requestTimeout: TimeInterval
 
     /// The token issued for this build by the collector's admin service, as a CI step, and embedded in
-    /// the app. It replaces the platform and build number in every batch, so a build cannot be invented
-    /// and can be excluded. Public by nature, not a credential. A source that requires one answers 401
-    /// without.
-    public var buildToken: String?
+    /// the app. Sent as `Authorization: Bearer`, it replaces the platform and build number in every
+    /// batch, so a build cannot be invented and can be excluded. Public by nature, not a credential. A
+    /// source that requires one answers 401 without.
+    public var token: String?
 
     /// ISO 3166-1 alpha-2 countries not measured at all: nothing is sent from a device whose region is
     /// one of them. Copy the source's `excludedCountries`.
@@ -70,7 +70,7 @@ public struct AnalyticsConfig: Sendable {
         spoolCapacity: Int = 1_000,
         maxAttempts: Int = 3,
         requestTimeout: TimeInterval = 10,
-        buildToken: String? = nil,
+        token: String? = nil,
         excludedCountries: Set<String> = [],
         logger: AnalyticsLogger? = nil
     ) {
@@ -84,7 +84,7 @@ public struct AnalyticsConfig: Sendable {
         self.spoolCapacity = spoolCapacity
         self.maxAttempts = maxAttempts
         self.requestTimeout = requestTimeout
-        self.buildToken = buildToken
+        self.token = token
         self.excludedCountries = Set(excludedCountries.map { $0.uppercased() })
         self.logger = logger
     }

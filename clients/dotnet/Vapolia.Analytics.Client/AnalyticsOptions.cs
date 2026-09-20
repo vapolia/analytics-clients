@@ -9,22 +9,11 @@ public sealed class AnalyticsOptions
     public required Uri IngestionUrl { get; set; }
     
     /// <summary>
-    /// The server-to-server key.
-    /// TODO: merge ApiKey with AccessToken, keep only one of the 2, to simplify client config.
+    /// The credential sent as <c>Authorization: Bearer</c> — a server token for server-to-server
+    /// analytics, or a build token for device-to-server analytics. The collector tells the two apart
+    /// from the token itself, not from how it arrived, so one property covers both roles.
     /// </summary>
-    /// <remarks>
-    /// for server to server analytics only.
-    /// </remarks>
-    public string? ApiKey { get; set; }
-
-    /// <summary>
-    /// The device-to-server key.
-    /// TODO: merge ApiKey with AccessToken, keep only one of the 2, to simplify client config.
-    /// </summary>
-    /// <remarks>
-    /// for device to server analytics only.
-    /// </remarks>
-    public string? AccessToken { get; set; }
+    public string? Token { get; set; }
     
     /// <summary>
     /// The identity of this installation

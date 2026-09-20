@@ -232,7 +232,7 @@ export class Queue {
       return fresh;
     }
 
-    const body = encodeBatch(id, device, fresh, context, this.options.buildToken);
+    const body = encodeBatch(id, device, fresh, context);
 
     for (let attempt = 1; ; attempt += 1) {
       this.stats.requests += 1;

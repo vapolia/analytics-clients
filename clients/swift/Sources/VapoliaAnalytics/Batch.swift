@@ -82,7 +82,6 @@ struct Pending: Hashable, Codable, Sendable {
 /// The wire shape of `POST /{source}`.
 struct BatchPayload: Encodable {
     let installId: String
-    let buildToken: String?
     let build: String?
     let platform: String?
     let osVersion: String?
@@ -100,13 +99,10 @@ struct BatchPayload: Encodable {
         let tz: Int?
     }
 
-    init(key: BatchKey, events: [Event], timestamps: ISO8601DateFormatter, buildToken: String? = nil) {
+    init(key: BatchKey, events: [Event], timestamps: ISO8601DateFormatter) {
         installId = key.installId
-        // With a build token the collector takes both from it: sending them too would only be ignored.
-        let token = buildToken.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
-        self.buildToken = token
-        build = token == nil ? key.device.build : nil
-        platform = token == nil ? key.device.platform : nil
+        build = key.device.build
+        platform = key.device.platform
         osVersion = key.device.osVersion
         deviceClass = key.device.deviceClass
         locale = key.device.locale
@@ -138,12 +134,11 @@ enum BatchEncoder {
     static func encode(
         key: BatchKey,
         events: [Event],
-        timestamps: ISO8601DateFormatter,
-        buildToken: String? = nil
+        timestamps: ISO8601DateFormatter
     ) throws -> Data {
         let encoder = JSONEncoder()
         // Sorted keys so a payload is comparable across runs; a nil field is simply not encoded.
         encoder.outputFormatting = [.sortedKeys]
-        return try encoder.encode(BatchPayload(key: key, events: events, timestamps: timestamps, buildToken: buildToken))
+        return try encoder.encode(BatchPayload(key: key, events: events, timestamps: timestamps))
     }
 }

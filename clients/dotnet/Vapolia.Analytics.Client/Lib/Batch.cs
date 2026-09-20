@@ -21,8 +21,6 @@ sealed record Pending(BatchKey Key, Event Event);
 sealed class BatchPayload
 {
     [JsonPropertyName("installId")] public required string InstallId { get; init; }
-    /// <summary>Carries the platform and the build: the collector takes both from it, not from the body.</summary>
-    [JsonPropertyName("buildToken")] public string? BuildToken { get; init; }
     /// <summary>The axis of the source's excludedCountries filter, which is why it stays top-level.</summary>
     [JsonPropertyName("country")] public string? Country { get; init; }
     /// <summary>Whitelisted per source, exactly like an event's props — see IAnalyticsContext.</summary>
@@ -79,12 +77,11 @@ sealed partial class AnalyticsJsonContext : JsonSerializerContext;
 
 static class BatchEncoder
 {
-    public static string Encode(BatchKey key, IReadOnlyList<Event> events, string? buildToken = null)
+    public static string Encode(BatchKey key, IReadOnlyList<Event> events)
     {
         var payload = new BatchPayload
         {
             InstallId = key.InstallId,
-            BuildToken = string.IsNullOrWhiteSpace(buildToken) ? null : buildToken,
             Country = key.Device.Country,
             Context = key.Context is { Length: > 2 }
                 ? JsonSerializer.Deserialize(key.Context, AnalyticsJsonContext.Default.DictionaryStringPropValue)

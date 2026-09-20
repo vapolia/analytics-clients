@@ -246,7 +246,7 @@ sealed class Sender : IAsyncDisposable
         if (fresh.Count == 0)
             return [];
 
-        var body = BatchEncoder.Encode(key, fresh, options.AccessToken);
+        var body = BatchEncoder.Encode(key, fresh);
 
         for (var attempt = 1; ; attempt++)
         {

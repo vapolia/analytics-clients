@@ -84,7 +84,7 @@ The queue is sent and written down when the app backgrounds, on its own, inside 
 | `Analytics.updateDevice { }` | Corrects what the device probe reported. Not for anything about the app. |
 | `await Analytics.stop()` | One last flush, then the sender stops. Rarely needed. |
 
-`AnalyticsConfig`: `source` (required), `endpoint`, `buildToken`, `excludedCountries`, `flushInterval` (30s), `batchSize` (100, the
+`AnalyticsConfig`: `source` (required), `endpoint`, `token`, `excludedCountries`, `flushInterval` (30s), `batchSize` (100, the
 collector's ceiling), `queueCapacity` (2000), `spoolCapacity` (1000), `maxAttempts` (3),
 `requestTimeout` (10s), `logger` (silent; pass `PrintLogger()` while integrating).
 

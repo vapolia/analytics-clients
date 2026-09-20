@@ -40,23 +40,6 @@ public class BatchEncoderTests
     }
 
     [TestMethod]
-    public void TheBuildTokenIsTheOnlySourceOfPlatformAndBuild()
-    {
-        var device = new Device { Country = "FR" };
-        var events = new[] { new Event("app_open", DateTimeOffset.UnixEpoch, null) };
-
-        var withToken = JsonDocument.Parse(BatchEncoder.Encode(new BatchKey(InstallId, device), events, "eyJ.token.sig")).RootElement;
-        var without = JsonDocument.Parse(BatchEncoder.Encode(new BatchKey(InstallId, device), events, " ")).RootElement;
-
-        Assert.AreEqual("eyJ.token.sig", withToken.GetProperty("buildToken").GetString());
-        Assert.AreEqual("FR", withToken.GetProperty("country").GetString());
-        // A blank token is no token, and nothing takes its place in the body.
-        Assert.IsFalse(without.TryGetProperty("buildToken", out _));
-        Assert.IsFalse(without.TryGetProperty("platform", out _));
-        Assert.IsFalse(without.TryGetProperty("build", out _));
-    }
-
-    [TestMethod]
     public void TimestampsAreIso8601InUtc()
     {
         var batch = Encode(new Device(), new Event("app_open", DateTimeOffset.UnixEpoch, null));

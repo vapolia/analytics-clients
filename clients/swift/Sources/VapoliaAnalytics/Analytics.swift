@@ -66,7 +66,7 @@ public final class Analytics: @unchecked Sendable {
         }
         let sender = Sender(
             config: config,
-            poster: URLSessionPoster(url: url, timeout: config.requestTimeout),
+            poster: URLSessionPoster(url: url, timeout: config.requestTimeout, token: config.token),
             spool: spool,
             counters: counters
         )

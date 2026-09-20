@@ -4,7 +4,7 @@ using System.Text;
 namespace Vapolia.Analytics.Client;
 
 /// <summary>One request to POST {endpoint}/{source}.</summary>
-sealed class HttpPublishHelper(HttpClient httpClient, Uri url, string? apiKey = null) : IPublishHelper
+sealed class HttpPublishHelper(HttpClient httpClient, Uri url, string? token = null) : IPublishHelper
 {
     public async Task<SendResult> PostAsync(string body, CancellationToken cancellationToken)
     {
@@ -13,9 +13,9 @@ sealed class HttpPublishHelper(HttpClient httpClient, Uri url, string? apiKey = 
             using var request = new HttpRequestMessage(HttpMethod.Post, url);
             request.Content = new StringContent(body, Encoding.UTF8, "application/json");
 
-            // Only ever a rate-limit ceiling; the collector accepts the batch either way.
-            if (!string.IsNullOrEmpty(apiKey))
-                request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {apiKey}");
+            // The collector tells a server token from a build token by its own claims, not the caller.
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {token}");
 
             using var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
 

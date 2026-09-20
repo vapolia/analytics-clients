@@ -112,8 +112,8 @@ func (c *Client) post(body []byte) (time.Duration, error) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	// Only ever a rate-limit ceiling; the collector accepts the batch either way.
-	if c.opts.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+c.opts.APIKey)
+	if c.opts.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.opts.Token)
 	}
 
 	resp, err := c.opts.HTTPClient.Do(req)

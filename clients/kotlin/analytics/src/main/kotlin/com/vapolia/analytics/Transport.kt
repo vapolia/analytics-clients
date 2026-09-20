@@ -19,6 +19,7 @@ internal class Transport(
     private val url: String,
     private val connectTimeoutMs: Int,
     private val readTimeoutMs: Int,
+    private val token: String? = null,
 ) {
     fun post(body: ByteArray): SendResult {
         val connection = try {
@@ -30,6 +31,8 @@ internal class Transport(
                 useCaches = false
                 setFixedLengthStreamingMode(body.size)
                 setRequestProperty("Content-Type", "application/json")
+                if (!token.isNullOrBlank())
+                    setRequestProperty("Authorization", "Bearer $token")
             }
         } catch (e: Exception) {
             return SendResult.Permanent("cannot open $url: $e")

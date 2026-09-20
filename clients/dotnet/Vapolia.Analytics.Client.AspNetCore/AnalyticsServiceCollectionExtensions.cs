@@ -54,7 +54,7 @@ public static class AnalyticsServiceCollectionExtensions
 
             return new Sender(
                 options,
-                new HttpPublishHelper(http, options.IngestionUrl, options.ApiKey),
+                new HttpPublishHelper(http, options.IngestionUrl, options.Token),
                 options.AdvancedOptions.SpoolPath is { Length: > 0 } path ? 
                     new PersistPendingItemsToLocalStorageHelper(path, options.AdvancedOptions.SpoolCapacity, provider.GetService<ILoggerFactory>()?.CreateLogger<PersistPendingItemsToLocalStorageHelper>()) 
                     : null,

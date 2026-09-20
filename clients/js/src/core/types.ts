@@ -93,11 +93,11 @@ export interface AnalyticsOptions {
 
   /**
    * The token issued for this build by the collector's admin service, as a CI step, and embedded in
-   * the app. It replaces the platform and build number in every batch, so a build cannot be invented
-   * and can be excluded. Public by nature, not a credential. A source that requires one answers 401
-   * without.
+   * the app. Sent as `Authorization: Bearer`, it replaces the platform and build number in every
+   * batch, so a build cannot be invented and can be excluded. Public by nature, not a credential. A
+   * source that requires one answers 401 without.
    */
-  buildToken?: string;
+  token?: string;
 
   /**
    * ISO 3166-1 alpha-2 countries not measured at all: nothing is sent from a device whose region is
@@ -166,7 +166,7 @@ export function resolveOptions(options: AnalyticsOptions): ResolvedOptions {
   return {
     source: options.source,
     endpoint: options.endpoint,
-    buildToken: options.buildToken ?? '',
+    token: options.token ?? '',
     excludedCountries: options.excludedCountries ?? [],
     flushIntervalMs: options.flushIntervalMs ?? 30_000,
     batchSize: Math.min(options.batchSize ?? 100, 100),

@@ -54,7 +54,8 @@ export async function start(options: AnalyticsOptions): Promise<void> {
       resolved,
       new FetchPoster(
         `${resolved.endpoint.replace(/\/+$/, '')}/${resolved.source}`,
-        resolved.requestTimeoutMs
+        resolved.requestTimeoutMs,
+        resolved.token || undefined
       ),
       new Spool(asyncStorage, resolved.source, resolved.spoolCapacity),
       () => identity.current()

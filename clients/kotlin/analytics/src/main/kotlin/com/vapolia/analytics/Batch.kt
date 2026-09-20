@@ -20,7 +20,7 @@ internal data class Pending(val key: BatchKey, val event: Event)
  * The wire shape of `POST /{source}`. Hand-written rather than a JSON library: the payload is a
  * handful of strings and scalars, and the client stays dependency-free.
  */
-internal class BatchEncoder(private val buildToken: String? = null) {
+internal class BatchEncoder {
     // Not thread-safe, and deliberately so: only the sender thread encodes.
     private val timestamps = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
         .apply { timeZone = TimeZone.getTimeZone("UTC") }
@@ -44,13 +44,8 @@ internal class BatchEncoder(private val buildToken: String? = null) {
         field("installId", key.installId)
 
         val device = key.device
-        // With a build token the collector takes both from it: sending them too would only be ignored.
-        if (buildToken.isNullOrBlank()) {
-            optional("build", device.build)
-            optional("platform", device.platform)
-        } else {
-            field("buildToken", buildToken)
-        }
+        optional("build", device.build)
+        optional("platform", device.platform)
         optional("osVersion", device.osVersion)
         optional("deviceClass", device.deviceClass)
         optional("locale", device.locale)

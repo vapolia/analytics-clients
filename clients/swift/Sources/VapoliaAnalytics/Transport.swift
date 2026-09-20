@@ -19,9 +19,11 @@ protocol HTTPPoster: Sendable {
 struct URLSessionPoster: HTTPPoster {
     let url: URL
     let session: URLSession
+    let token: String?
 
-    init(url: URL, timeout: TimeInterval) {
+    init(url: URL, timeout: TimeInterval, token: String? = nil) {
         self.url = url
+        self.token = token
 
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = timeout
@@ -35,6 +37,9 @@ struct URLSessionPoster: HTTPPoster {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token, !token.trimmingCharacters(in: .whitespaces).isEmpty {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
         request.httpBody = body
 
         do {

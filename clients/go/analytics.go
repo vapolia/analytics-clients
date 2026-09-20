@@ -45,10 +45,10 @@ type Options struct {
 	// FlushInterval is how often pending events are sent even when no batch is full. Default 30s.
 	FlushInterval time.Duration
 
-	// APIKey is a server token issued by the collector's admin service, sent as
+	// Token is a server token issued by the collector's admin service, sent as
 	// "Authorization: Bearer". It raises this caller's rate-limit ceiling and names its own os and
 	// build, which the collector stores in place of any device's.
-	APIKey string
+	Token string
 
 	// ExcludedCountries are ISO 3166-1 alpha-2 countries not measured at all: nothing is sent for a
 	// device whose region is one of them. Copy the source's excludedCountries.

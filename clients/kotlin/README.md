@@ -84,7 +84,7 @@ The queue is sent and written down when the app goes to the background, on its o
 | `updateDevice { }` | Corrects what the device probe reported. Not for anything about the app. |
 | `stop(timeoutMs)` | One last flush, then the sender stops. Rarely needed. |
 
-`AnalyticsConfig`: `source` (required), `endpoint`, `buildToken`, `excludedCountries`, `flushIntervalMs` (30s), `batchSize` (100, the
+`AnalyticsConfig`: `source` (required), `endpoint`, `token`, `excludedCountries`, `flushIntervalMs` (30s), `batchSize` (100, the
 collector's ceiling), `queueCapacity` (2000), `spoolCapacity` (1000), `maxAttempts` (3),
 `connectTimeoutMs` / `readTimeoutMs` (10s), `logger` (silent; pass
 `LogcatLogger` while integrating).

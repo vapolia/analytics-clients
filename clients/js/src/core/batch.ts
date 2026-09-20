@@ -10,15 +10,11 @@ export function encodeBatch(
   installId: string,
   device: Device,
   events: AnalyticsEvent[],
-  context?: Record<string, PropValue>,
-  buildToken?: string
+  context?: Record<string, PropValue>
 ): string {
-  const token = buildToken?.trim() ? buildToken : undefined;
   return JSON.stringify({
     installId,
     ...device,
-    // With a build token the collector takes both from it: sending them too would only be ignored.
-    ...(token ? { buildToken: token, build: undefined, platform: undefined } : {}),
     context: context && Object.keys(context).length > 0 ? context : undefined,
     // Sorted by timestamp: what leaves is then in the order it happened, whatever the buffer did.
     events: [...events]

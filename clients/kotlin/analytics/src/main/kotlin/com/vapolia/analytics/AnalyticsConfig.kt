@@ -47,11 +47,11 @@ data class AnalyticsConfig(
 
     /**
      * The token issued for this build by the collector's admin service, as a CI step, and embedded in
-     * the app. It replaces the platform and build number in every batch, so a build cannot be invented
-     * and can be excluded. Public by nature, not a credential. A source that requires one answers 401
-     * without.
+     * the app. Sent as `Authorization: Bearer`, it replaces the platform and build number in every
+     * batch, so a build cannot be invented and can be excluded. Public by nature, not a credential. A
+     * source that requires one answers 401 without.
      */
-    val buildToken: String? = null,
+    val token: String? = null,
 
     /**
      * ISO 3166-1 alpha-2 countries not measured at all: nothing is sent from a device whose region is

@@ -99,7 +99,7 @@ without a store release.
 | `stop()` | One last flush, then the sender stops. Rarely needed. |
 | `registerBackgroundFlush()` | Opt-in, see below. |
 
-`AnalyticsOptions`: `source` and `endpoint` (both required), `buildToken`, `excludedCountries`, `flushIntervalMs` (30 000), `batchSize` (100,
+`AnalyticsOptions`: `source` and `endpoint` (both required), `token`, `excludedCountries`, `flushIntervalMs` (30 000), `batchSize` (100,
 the collector's ceiling), `queueCapacity` (2000), `spoolCapacity` (1000), `spoolDebounceMs` (500),
 `maxAttempts` (3), `requestTimeoutMs` (10 000), `context`, `device`, `logger`.
 

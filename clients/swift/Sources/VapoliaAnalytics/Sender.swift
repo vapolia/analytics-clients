@@ -105,7 +105,7 @@ actor Sender {
 
         let body: Data
         do {
-            body = try BatchEncoder.encode(key: key, events: fresh, timestamps: timestamps, buildToken: config.buildToken)
+            body = try BatchEncoder.encode(key: key, events: fresh, timestamps: timestamps)
         } catch {
             counters.dropped(fresh.count)
             config.logger?.error("cannot encode \(fresh.count) events: \(error)")

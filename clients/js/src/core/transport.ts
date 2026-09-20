@@ -17,7 +17,8 @@ export interface Poster {
 export class FetchPoster implements Poster {
   constructor(
     private readonly url: string,
-    private readonly timeoutMs: number
+    private readonly timeoutMs: number,
+    private readonly token?: string
   ) {}
 
   async post(body: string): Promise<SendResult> {
@@ -25,9 +26,12 @@ export class FetchPoster implements Poster {
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (this.token) headers.Authorization = `Bearer ${this.token}`;
+
       const response = await fetch(this.url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body,
         signal: controller.signal,
       });

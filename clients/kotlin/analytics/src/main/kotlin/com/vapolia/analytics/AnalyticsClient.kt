@@ -147,7 +147,7 @@ internal class AnalyticsClient(
     // the command queue is the buffer, and a single sender keeps one installation's requests in order.
     private fun run() {
         val buffers = LinkedHashMap<BatchKey, MutableList<Event>>()
-        val encoder = BatchEncoder(config.buildToken)
+        val encoder = BatchEncoder()
 
         spool?.let { disk ->
             runCatching { disk.load() }

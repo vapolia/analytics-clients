@@ -30,20 +30,6 @@ describe('encodeBatch', () => {
     expect('props' in parsed.events[0]).toBe(false);
   });
 
-  it('sends the build token in place of platform and build', () => {
-    const device = { platform: 'ios', build: '77', country: 'FR' };
-
-    const withToken = JSON.parse(encodeBatch(installId, device, [event('app_open', 0)], undefined, 'eyJ.token.sig'));
-    const without = JSON.parse(encodeBatch(installId, device, [event('app_open', 0)], undefined, ''));
-
-    expect(withToken.buildToken).toBe('eyJ.token.sig');
-    expect('platform' in withToken).toBe(false);
-    expect('build' in withToken).toBe(false);
-    expect(withToken.country).toBe('FR');
-    expect('buildToken' in without).toBe(false);
-    expect(without.platform).toBe('ios');
-  });
-
   it('writes timestamps as iso 8601 in utc', () => {
     const json = encodeBatch(installId, {}, [event('app_open', 0)]);
 

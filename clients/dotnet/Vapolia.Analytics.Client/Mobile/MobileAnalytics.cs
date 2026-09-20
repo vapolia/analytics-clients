@@ -75,7 +75,7 @@ public static class MobileAnalytics
             var identity = new MobileInstallIdentityProvider(options);
             var started = new Sender(
                 options,
-                new HttpPublishHelper(httpClient, options.IngestionUrl, options.ApiKey),
+                new HttpPublishHelper(httpClient, options.IngestionUrl, options.Token),
                 new (options.AdvancedOptions.SpoolPath, options.AdvancedOptions.SpoolCapacity, logger),
                 logger ?? NullLogger.Instance);
 
