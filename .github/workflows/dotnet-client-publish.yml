@@ -32,8 +32,8 @@ env:
 
 jobs:
   publish:
-    # macOS because the package carries the iOS and macCatalyst targets, which only build there.
-    runs-on: macos-latest
+    # A library, not an app: the ios/maccatalyst TFMs build from reference assemblies alone, no Xcode needed
+    runs-on: ubuntu-latest
 
     # A release event carries no tag filter, unlike a tag push, so every client's workflow wakes on
     # every release of this repository. This is what keeps each one to its own.
