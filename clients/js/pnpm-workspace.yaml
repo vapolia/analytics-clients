@@ -1,0 +1,5 @@
+# Forces patched versions of two vulnerable transitive deps pulled in by react-native's own
+# tooling (metro's image-size, xcode's uuid) — dev-time only, never shipped in the package.
+overrides:
+  image-size: '>=2.0.3'
+  uuid: '>=11.1.1'
