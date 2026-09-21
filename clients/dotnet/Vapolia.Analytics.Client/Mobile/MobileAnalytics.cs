@@ -90,7 +90,7 @@ public static class MobileAnalytics
 
     /// <summary>
     /// Sends what is queued and writes down the rest. Called on its own when the app goes to the
-    /// background, unless <see cref="AnalyticsOptions.AutoFlushOnBackground"/> was turned off.
+    /// background, unless <see cref="AnalyticsAppOptions.AutoFlushOnBackground"/> was turned off.
     /// </summary>
     /// <param name="cancellationToken">Gives up waiting; the queue is spooled either way.</param>
     public static Task FlushAsync(CancellationToken cancellationToken = default)

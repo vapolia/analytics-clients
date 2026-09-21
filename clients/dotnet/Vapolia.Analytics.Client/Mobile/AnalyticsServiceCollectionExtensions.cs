@@ -17,7 +17,7 @@ public static class AnalyticsServiceCollectionExtensions
     /// If <see cref="AnalyticsOptions.Enabled"/> is false or if the source is missing, it registers <see cref="NullAnalytics"/>.
     ///
     /// <see cref="IAnalyticsContext"/> is queried once when posting a batch of events.
-    /// To use your own HttpClient, set <see cref="AnalyticsOptions.CreateHttpClient"/>.
+    /// To use your own HttpClient, set <see cref="AnalyticsAdvancedOptions.CreateHttpClient"/>.
     /// You can hook into analytics lifecycle events by injecting <see cref="IAppLifecycle"/> and/or <see cref="IInstallContext"/>.
     /// </remarks>
     /// <example>

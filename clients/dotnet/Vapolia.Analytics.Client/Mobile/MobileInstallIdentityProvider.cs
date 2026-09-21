@@ -19,7 +19,7 @@ public sealed class MobileInstallIdentityProvider : IInstallContext
     readonly Lock gate = new();
     Device? detected;
 
-    /// <summary>Reads and renews the id according to <see cref="AnalyticsOptions.InstallIdLifetime"/>.</summary>
+    /// <summary>Reads and renews the id according to <see cref="AnalyticsAdvancedOptions.InstallIdLifetime"/>.</summary>
     /// <param name="options">The same options the sender was given.</param>
     public MobileInstallIdentityProvider(AnalyticsOptions options) => this.options = options;
 
