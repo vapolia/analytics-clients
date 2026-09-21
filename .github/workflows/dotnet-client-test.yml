@@ -25,8 +25,16 @@ env:
   TESTS: clients/dotnet/Vapolia.Analytics.Client.Tests/Vapolia.Analytics.Client.Tests.csproj
 
 jobs:
-  server:
-    runs-on: ubuntu-latest
+  test:
+    # Restoring the project evaluates every TargetFrameworks entry regardless of -f, so every
+    # workload it declares must be installed before any build, even one scoped to a single TFM.
+    # windows-latest carries all of android/ios/maccatalyst, unlike ubuntu (no ios/maccatalyst) or
+    # macOS (no windows SDK) — so it is the only runner that can build this project in one job.
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - uses: actions/checkout@v7
@@ -35,35 +43,13 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Build the core and the ASP.NET Core package
+      - run: dotnet workload install android ios maccatalyst --skip-sign-check
+
+      - name: Build every target
         run: |
-          dotnet build $CLIENT -f net10.0 -c Release
+          dotnet build $CLIENT -c Release
           dotnet build $ASPNETCORE -c Release
 
       # MTP: run the test project, do not `dotnet test` it.
       - name: Test
         run: dotnet run --project $TESTS -c Release
-
-      - name: Build the Android and Windows targets
-        run: |
-          dotnet workload install android --skip-sign-check
-          dotnet build $CLIENT -f net10.0-android -c Release
-          # net10.0-windows carries no Windows SDK projection, so it builds here as well as anywhere.
-          dotnet build $CLIENT -f net10.0-windows -c Release
-
-  mobile:
-    # Only when asked: the ios/maccatalyst workloads only install on macOS, billed ten times
-    # Linux — not an Xcode-build requirement, a hard restriction on `dotnet workload install` itself.
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: macos-latest
-
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: '10.0.x'
-
-      - run: dotnet workload install ios maccatalyst --skip-sign-check
-      - run: dotnet build $CLIENT -f net10.0-ios -c Release
-      - run: dotnet build $CLIENT -f net10.0-maccatalyst -c Release

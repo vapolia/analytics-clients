@@ -32,11 +32,14 @@ env:
 
 jobs:
   publish:
-    # macOS because `dotnet workload install ios/maccatalyst` only installs on macOS (and Windows),
-    # regardless of whether the actual build needs Xcode. `pack` builds every TFM in one run, so
-    # this job can't be split the way dotnet-client-test.yml splits its android/windows build from
-    # its ios/maccatalyst one.
-    runs-on: macos-latest
+    # Restoring the project evaluates every TargetFrameworks entry, so android/ios/maccatalyst all
+    # need their workload installed to pack any TFM. windows-latest is the one runner that has
+    # all three installable (unlike ubuntu, which lacks ios/maccatalyst).
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        shell: bash
 
     # A release event carries no tag filter, unlike a tag push, so every client's workflow wakes on
     # every release of this repository. This is what keeps each one to its own.
