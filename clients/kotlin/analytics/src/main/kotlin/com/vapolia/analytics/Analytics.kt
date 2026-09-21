@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * The entry point. One call in `Application.onCreate`, one call per event:
  *
  * ```kotlin
- * Analytics.start(this, source = "myapp")
+ * Analytics.start(this, ingestionUrl = "https://analytics.example.com/myapp")
  * Analytics.track("game_end", "result" to "win", "moves" to 34)
  * ```
  *
@@ -35,31 +35,45 @@ object Analytics {
 
     /**
      * Starts the sender. Calling it twice is a no-op: the second call keeps the first configuration.
-     * [endpoint] is the collector's base URL and has no default.
+     * [ingestionUrl] is `https://baseUrl/sourceName` and has no default.
      */
     @JvmStatic
-    fun start(context: Context, source: String, endpoint: String) =
-        start(context, AnalyticsConfig(source = source, endpoint = endpoint))
+    fun start(context: Context, ingestionUrl: String) =
+        start(context, AnalyticsOptions(ingestionUrl = ingestionUrl))
 
     @JvmStatic
     @Synchronized
-    fun start(context: Context, config: AnalyticsConfig) {
+    fun start(context: Context, options: AnalyticsOptions) {
         if (client != null) return
+        if (!options.enabled) return
 
         val app = context.applicationContext
-        val installIdentity = InstallIdentity(app.getSharedPreferences(PREFS, Context.MODE_PRIVATE))
+        val installIdentity = InstallIdentity(
+            prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE),
+            idLifetimeMs = options.advanced.installIdLifetimeMs,
+            refusalLifetimeMs = options.advanced.optOutLifetimeMs,
+        )
+        options.seedInstallId?.invoke()?.let { installIdentity.seed(it) }
 
         identity = installIdentity
         device = DeviceProbe.detect(app)
+        options.context?.let { this.context = it }
+        autoFlushOnBackground = options.app.autoFlushOnBackground
         client = AnalyticsClient(
-            config = config,
+            options = options,
             transport = Transport(
-                url = config.endpoint.trimEnd('/') + "/" + config.source.trim('/'),
-                connectTimeoutMs = config.connectTimeoutMs,
-                readTimeoutMs = config.readTimeoutMs,
-                token = config.token,
+                url = options.ingestionUrl.trimEnd('/'),
+                connectTimeoutMs = options.advanced.connectTimeoutMs,
+                readTimeoutMs = options.advanced.readTimeoutMs,
+                token = options.token,
             ),
-            spool = Spool(File(app.filesDir, SPOOL_FILE), config.spoolCapacity),
+            // Zero capacity is how an app turns the spool off, as in the .NET client.
+            spool = options.advanced.spoolCapacity.takeIf { it > 0 }?.let {
+                Spool(
+                    options.advanced.spoolPath?.let(::File) ?: File(app.filesDir, SPOOL_FILE),
+                    it,
+                )
+            },
         )
 
         (app as? Application)?.registerActivityLifecycleCallbacks(Lifecycle)
@@ -147,6 +161,21 @@ object Analytics {
     }
 
     /**
+     * When this installation was first seen, in milliseconds since the epoch, kept across id
+     * renewals. Feed it to [InstallAge] if your source whitelists a bucket for it.
+     */
+    @JvmStatic
+    val firstSeen: Long?
+        get() = identity?.firstSeen()
+
+    /**
+     * Takes an identity issued elsewhere, for a client migrating off another SDK. Only before the
+     * client ever issued one of its own; returns whether the seed was taken.
+     */
+    @JvmStatic
+    fun seed(seed: InstallSeed): Boolean = identity?.seed(seed) ?: false
+
+    /**
      * The app coming back to the foreground — where an app names its own `app_open`. It hangs off the
      * activity-lifecycle subscription the client already holds, so a rotation does not fire it.
      */
@@ -180,7 +209,7 @@ object Analytics {
         override fun onActivityStopped(activity: Activity) {
             if (started.decrementAndGet() == 0) {
                 runCatching { onBackground?.invoke() }
-                client?.flush(timeoutMs = 0, persist = true)
+                if (autoFlushOnBackground) client?.flush(timeoutMs = 0, persist = true)
             }
         }
 
@@ -190,6 +219,8 @@ object Analytics {
         override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
         override fun onActivityDestroyed(activity: Activity) = Unit
     }
+
+    @Volatile private var autoFlushOnBackground = true
 
     private val contextEncoder = BatchEncoder()
 
@@ -201,7 +232,7 @@ object Analytics {
     private const val DEFAULT_TIMEOUT_MS = 3_000L
 }
 
-/** Sends the client's own failures to logcat. Pass it as [AnalyticsConfig.logger] while integrating. */
+/** Sends the client's own failures to logcat. Pass it as [AnalyticsAdvancedOptions.logger] while integrating. */
 object LogcatLogger : AnalyticsLogger {
     override fun warn(message: String, error: Throwable?) {
         Log.w("Analytics", message, error)

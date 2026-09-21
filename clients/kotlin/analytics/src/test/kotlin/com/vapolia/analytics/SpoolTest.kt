@@ -18,7 +18,7 @@ class SpoolTest {
     private fun pending(name: String, ts: Long = 1_757_500_000_000) = Pending(
         BatchKey(
             "11111111-0000-0000-0000-000011111111",
-            Device(platform = "android", country = "FR"),
+            Device(country = "FR"),
             """{"plan":"premium"}""",
         ),
         Event(name, ts, mapOf("result" to "win", "moves" to 34.0, "ok" to true)),

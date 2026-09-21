@@ -13,6 +13,13 @@ enum SendResult: Sendable, Equatable {
 /// What the sender needs from the network. A protocol so the send path can be tested without one.
 protocol HTTPPoster: Sendable {
     func post(_ body: Data) async -> SendResult
+
+    /// Releases whatever the transport holds. Called once, after the sender's last flush.
+    func shutdown()
+}
+
+extension HTTPPoster {
+    func shutdown() {}
 }
 
 /// One request to `POST {endpoint}/{source}`.
@@ -31,6 +38,12 @@ struct URLSessionPoster: HTTPPoster {
         configuration.waitsForConnectivity = false
         configuration.urlCache = nil
         session = URLSession(configuration: configuration)
+    }
+
+    /// A URLSession retains itself until it is invalidated, so a stop/start cycle would leak one
+    /// session and its connection pool per cycle.
+    func shutdown() {
+        session.finishTasksAndInvalidate()
     }
 
     func post(_ body: Data) async -> SendResult {

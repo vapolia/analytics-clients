@@ -8,7 +8,7 @@ A dependency-free Swift client for the collector (`POST {endpoint}/{source}`).
 import VapoliaAnalytics
 
 // application(_:didFinishLaunchingWithOptions:) or the App's init
-Analytics.start(source: "<sourceName>", endpoint: "https://analytics.example.com")
+Analytics.start(ingestionUrl: URL(string: "https://analytics.example.com/<sourceName>")!)
 
 // what is true of the installation, read again for every event
 Analytics.context = { ["plan": .string(user.plan), "tutorial_done": .bool(progress.done)] }
@@ -59,9 +59,10 @@ The manifest lives at the repository root because SwiftPM requires it there; the
 | | |
 |---|---|
 | Installation id | A random UUID in `UserDefaults`, renewed after 390 days — the 13-month ceiling, with a margin for clock drift. **Not** in the Keychain: a Keychain item survives the app being deleted, which would make the id outlive the installation it names. |
-| Device context | `platform` (`ios` or `maccatalyst`), `osVersion`, `deviceClass` (idiom), `locale` (BCP 47), `country` (the **region setting**, never a geolocation), `store` (`apple`), `build` (`CFBundleVersion`). |
+| Device context | `country`, and only `country`: the **region setting**, never a geolocation. The platform, the build, the OS version, the device class and the store come from the `Authorization` token, which names the build that was issued it — see the [contract](../README.md#payload). |
 | Time zone | Each event carries the device offset in minutes east of UTC (`tz`), read at the instant of the event, apart from its UTC `ts`. |
 | `isFirstRun` | Whether the installation has been seen before, so *your* `first_open` fires once — kept apart from the id, so a renewal is not a new install. |
+| `firstSeen` | When the installation was first seen, kept across id renewals. Feed it to `InstallAge.bucket(firstSeen:now:)` for a `"0"` / `"1-7"` / `"8-30"` / `"31-90"` / `"90+"` bucket, if your source whitelists a key for it. |
 | `onForeground` / `onBackground` | `willEnterForeground` and `didEnterBackground`, from the observers the client already holds — not `didBecomeActive`, which also fires after a phone call or a pulled-down notification centre. |
 | Background | On `didEnterBackground` the queue is sent and spooled, under a background task. |
 | Privacy manifest | The package ships its own `PrivacyInfo.xcprivacy`: no tracking, *Product Interaction* not linked to the user, purpose *Analytics*, `UserDefaults` reason `CA92.1`. |
@@ -72,8 +73,8 @@ The queue is sent and written down when the app backgrounds, on its own, inside 
 
 | | |
 |---|---|
-| `Analytics.start(source:endpoint:)` | Starts the sender, on the main actor. Idempotent. `endpoint` is the collector's base URL; there is no default. |
-| `Analytics.start(_ config: AnalyticsConfig)` | Same, with everything else configurable. |
+| `Analytics.start(ingestionUrl:)` | Starts the sender, on the main actor. Idempotent. `ingestionUrl` is `https://baseUrl/sourceName`; there is no default. |
+| `Analytics.start(_ options: AnalyticsOptions)` | Same, with everything else configurable. |
 | `Analytics.track(_:_:)` | `Analytics.track("theme_apply", ["night": true])`. Props are `PropValue` — string, number or bool — and take literals. |
 | `Analytics.flush()` / `await Analytics.flushAndWait()` | Send what is queued, without / with waiting. |
 | `Analytics.optedOut` | The right of opposition. Off by default; setting it drops the queue and forgets the id. |
@@ -81,12 +82,31 @@ The queue is sent and written down when the app backgrounds, on its own, inside 
 | `Analytics.stats` | `accepted` / `rejected` / `dropped` / `sent` / `requests`. |
 | `Analytics.context` | What is true of the installation for a whole batch, read again for every event. Every key must be on the source's `context` whitelist. |
 | `Analytics.isFirstRun`, `markSeen()`, `onForeground`, `onBackground` | What an app needs to name its own opens. |
+| `Analytics.firstSeen`, `InstallAge.bucket(firstSeen:now:)` | The installation's age, in buckets, for a whitelisted `context` key. |
+| `Analytics.seed(_:)` | Takes an `InstallSeed` from another SDK, once, before this client ever issued an id of its own. |
 | `Analytics.updateDevice { }` | Corrects what the device probe reported. Not for anything about the app. |
 | `await Analytics.stop()` | One last flush, then the sender stops. Rarely needed. |
 
-`AnalyticsConfig`: `source` (required), `endpoint`, `token`, `excludedCountries`, `flushInterval` (30s), `batchSize` (100, the
-collector's ceiling), `queueCapacity` (2000), `spoolCapacity` (1000), `maxAttempts` (3),
-`requestTimeout` (10s), `logger` (silent; pass `PrintLogger()` while integrating).
+`AnalyticsOptions` mirrors the .NET client, which is this repository's reference: `ingestionUrl`
+(required), `token`, `seedInstallId`, `enabled`, `excludedCountries`, `context` — and the rest under
+`advanced` and `app`:
+
+```swift
+Analytics.start(AnalyticsOptions(
+    ingestionUrl: URL(string: "https://analytics.example.com/myapp")!,
+    token: BuildToken.value,
+    excludedCountries: ["KR"],
+    advanced: .init(queueCapacity: 4_000, logger: PrintLogger()),
+    app: .init(autoFlushOnBackground: true)
+))
+```
+
+`advanced`: `flushInterval` (30 s), `maxEventsPerWindow` (30), `rateWindow` (60 s), `batchSize` (100,
+the collector's ceiling), `queueCapacity` (4000), `maxAttempts` (3), `requestTimeout` (10 s),
+`spoolPath` (nil: Caches), `spoolCapacity` (1000, zero disables the spool), `installIdLifetime` and
+`optOutLifetime` (390 days each), `logger` (silent; pass `PrintLogger()` while integrating),
+`onError` (`(Error?, String, Bool)`, called on every loss next to the log).
+`app`: `autoFlushOnBackground` (true), `backgroundScope` (nil: the client's own `beginBackgroundTask`).
 
 ## Failure behaviour
 
@@ -117,18 +137,17 @@ Measurement must never fail a user action, so nothing surfaces an error:
 ## Build and test
 
 ```bash
+swift build && swift test                       # seconds, on any Mac
 xcodebuild test -scheme VapoliaAnalytics -destination 'platform=iOS Simulator,name=iPhone 16'
 ```
 
-Tests need a simulator: the package supports iOS and macCatalyst only, so `swift test` on a Mac has
-no destination to build for. [`.github/workflows/swift-client-test.yml`](../../.github/workflows/swift-client-test.yml)
-runs exactly that, picking whatever iPhone simulator the runner has.
+The manifest declares a macOS platform alongside iOS and macCatalyst. macOS is not a shipping target
+— it is what `swift test` compiles for on a Mac, which catches a compile error in seconds instead of
+waiting on a simulator. [`.github/workflows/swift-client-test.yml`](../../.github/workflows/swift-client-test.yml)
+runs both, the fast one first.
 
-The UIKit layer is a thin shell (`Analytics`, `DeviceProbe`); the queue, the sanitizer, the encoder,
-the spool and the transport are Foundation-only, which is what the 24 tests cover.
-
-> Written on a Windows workstation with no Swift toolchain: this code has **not** been compiled
-> locally. The CI job above is what proves it builds — run it before relying on the client.
+The UIKit layer is a thin shell (`Analytics`, `DeviceProbe`); the sender, the sanitizer, the encoder,
+the spool and the transport are Foundation-only, which is what the 42 tests cover.
 
 ## Versioning
 

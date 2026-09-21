@@ -6,7 +6,7 @@ import { MemoryStorage } from './support';
 
 function pending(name: string): Pending {
   return {
-    device: { platform: 'android', country: 'FR' },
+    device: { country: 'FR' },
     installId: '11111111-0000-0000-0000-000011111111',
     event: { name, ts: 1_757_500_000_000, props: { result: 'win', moves: 34, ok: true } },
   };

@@ -1,7 +1,8 @@
 import type { AnalyticsEvent, Device, PropValue } from './types';
 
 /**
- * The wire shape of `POST /{source}`.
+ * The wire shape of `POST /{source}`: `installId`, `country`, `context`, `events` and nothing else.
+ * The platform and the build come from the `Authorization` token alone, never the body.
  *
  * `JSON.stringify` drops undefined fields, which is exactly what the collector expects: an absent
  * field and a null one mean the same thing to it, and the absent one is shorter.
@@ -14,7 +15,7 @@ export function encodeBatch(
 ): string {
   return JSON.stringify({
     installId,
-    ...device,
+    country: device.country,
     context: context && Object.keys(context).length > 0 ? context : undefined,
     // Sorted by timestamp: what leaves is then in the order it happened, whatever the buffer did.
     events: [...events]

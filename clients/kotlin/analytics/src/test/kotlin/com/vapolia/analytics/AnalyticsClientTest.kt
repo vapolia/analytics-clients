@@ -66,14 +66,15 @@ class AnalyticsClientTest {
         maxAttempts: Int = 3,
         url: String = collector.url,
     ): AnalyticsClient = AnalyticsClient(
-        config = AnalyticsConfig(
+        options = AnalyticsOptions(
+            ingestionUrl = "unused, the transport is built here/testsource",
             excludedCountries = setOf("KR"),
-            source = "testsource",
-            endpoint = "unused, the transport is built here",
-            flushIntervalMs = 3_600_000, // tests flush explicitly
-            batchSize = batchSize,
-            queueCapacity = queueCapacity,
-            maxAttempts = maxAttempts,
+            advanced = AnalyticsAdvancedOptions(
+                flushIntervalMs = 3_600_000, // tests flush explicitly
+                batchSize = batchSize,
+                queueCapacity = queueCapacity,
+                maxAttempts = maxAttempts,
+            ),
         ),
         transport = Transport(url, connectTimeoutMs = 2_000, readTimeoutMs = 2_000),
         spool = spool,
@@ -87,7 +88,7 @@ class AnalyticsClientTest {
     @Test
     fun `sends one batch carrying the global properties`() {
         val client = client()
-        val device = Device(platform = "Android", country = "fr", deviceClass = "phone")
+        val device = Device(country = "fr")
 
         val context = """{"plan":"premium"}"""
         client.track(installId, device, "app_open", null, context)
@@ -98,7 +99,6 @@ class AnalyticsClientTest {
         assertEquals(1, bodies.size)
         val body = bodies.single()
         assertTrue(body, body.contains("\"installId\":\"$installId\""))
-        assertTrue(body, body.contains("\"platform\":\"android\""))
         assertTrue(body, body.contains("\"country\":\"FR\""))
         assertTrue(body, body.contains("\"context\":{\"plan\":\"premium\"}"))
         assertTrue(body, body.contains("\"moves\":34"))
@@ -109,10 +109,10 @@ class AnalyticsClientTest {
     fun `groups by install id and device`() {
         val client = client()
 
-        client.track(installId, Device(platform = "android"), "app_open", null)
-        client.track(installId, Device(platform = "android"), "game_start", null)
-        client.track(installId, Device(platform = "android", build = "42"), "app_open", null)
-        client.track(otherInstallId, Device(platform = "android"), "app_open", null)
+        client.track(installId, Device(country = "FR"), "app_open", null)
+        client.track(installId, Device(country = "FR"), "game_start", null)
+        client.track(installId, Device(country = "DE"), "app_open", null)
+        client.track(otherInstallId, Device(country = "FR"), "app_open", null)
         client.flushOrFail()
 
         assertEquals(3, collector.received().size)
@@ -207,7 +207,7 @@ class AnalyticsClientTest {
         val file = folder.newFile("spool")
         val failing = client(spool = Spool(file, 100), maxAttempts = 1, url = "http://127.0.0.1:1/testsource")
 
-        failing.track(installId, Device(platform = "android"), "game_end", mapOf("result" to "win"))
+        failing.track(installId, Device(country = "FR"), "game_end", mapOf("result" to "win"))
         assertTrue(failing.stop(10_000))
         assertTrue("the queue should have been written down", file.exists())
 

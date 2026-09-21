@@ -43,14 +43,8 @@ internal class BatchEncoder {
         append('{')
         field("installId", key.installId)
 
-        val device = key.device
-        optional("build", device.build)
-        optional("platform", device.platform)
-        optional("osVersion", device.osVersion)
-        optional("deviceClass", device.deviceClass)
-        optional("locale", device.locale)
-        optional("country", device.country)
-        optional("store", device.store)
+        // The platform and the build come from the Authorization token alone, never the body.
+        optional("country", key.device.country)
 
         // Already cleaned and canonical: written through as-is, not re-encoded.
         if (key.context.length > 2) {

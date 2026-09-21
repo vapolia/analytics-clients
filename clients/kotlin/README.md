@@ -9,7 +9,7 @@ A dependency-free Android client for the collector (`POST {endpoint}/{source}`).
 implementation("com.vapolia.analytics:analytics:1.0.0")
 
 // Application.onCreate
-Analytics.start(this, source = "<sourceName>", endpoint = "https://analytics.example.com")
+Analytics.start(this, ingestionUrl = "https://analytics.example.com/<sourceName>")
 
 // what is true of the installation, read again for every event
 Analytics.context = { mapOf("plan" to user.plan, "tutorial_done" to progress.done) }
@@ -59,7 +59,7 @@ manifest.
 | | |
 |---|---|
 | Installation id | A random UUID in the app's own `SharedPreferences`, renewed after 390 days — the 13-month ceiling, with a margin for clock drift. Never derived from an account, a device id, or an advertising id. |
-| Device context | `platform`, `osVersion`, `deviceClass` (`sw600dp` = tablet), `locale`, `country` (the **region setting**, never a geolocation), `store` (Play or other), `build` (the store build number). |
+| Device context | `country`, and only `country`: the **region setting**, never a geolocation. The platform, the build, the OS version, the device class and the store come from the `Authorization` token, which names the build that was issued it — see the [contract](../README.md#payload). |
 | Time zone | Each event carries the device offset in minutes east of UTC (`tz`), read at the instant of the event, apart from its UTC `ts`. |
 | `isFirstRun` | Whether the installation has been seen before, so *your* `first_open` fires once — kept apart from the id, so a renewal is not a new install. |
 | `onForeground` / `onBackground` | The activity lifecycle the client already watches to flush, with its rotation guard. |
@@ -71,8 +71,8 @@ The queue is sent and written down when the app goes to the background, on its o
 
 | | |
 |---|---|
-| `start(context, source, endpoint)` | Starts the sender. Idempotent. `endpoint` is the collector's base URL; there is no default. |
-| `start(context, AnalyticsConfig(...))` | Same, with everything else configurable. |
+| `start(context, ingestionUrl)` | Starts the sender. Idempotent. `ingestionUrl` is `https://baseUrl/sourceName`; there is no default. |
+| `start(context, AnalyticsOptions(...))` | Same, with everything else configurable. |
 | `track(name, vararg props: Pair<String, Any?>)` | `Analytics.track("theme_apply", "night" to true)`. |
 | `track(name, props: Map<String, Any?>?)` | Same, for a map built elsewhere. |
 | `flush()` / `flushBlocking(timeoutMs)` | Send what is queued, without / with waiting. |
@@ -81,13 +81,31 @@ The queue is sent and written down when the app goes to the background, on its o
 | `stats` | `accepted` / `rejected` / `dropped` / `sent` / `requests`. |
 | `context = { map }` | What is true of the installation for a whole batch, read again for every event. Every key must be on the source's `context` whitelist. |
 | `isFirstRun`, `markSeen()`, `onForeground`, `onBackground` | What an app needs to name its own opens. |
+| `firstSeen`, `InstallAge.bucket(firstSeen, now)` | The installation's age, in buckets, for a whitelisted `context` key. |
+| `seed(InstallSeed)` | Takes an id from another SDK, once, before this client ever issued one of its own. |
 | `updateDevice { }` | Corrects what the device probe reported. Not for anything about the app. |
 | `stop(timeoutMs)` | One last flush, then the sender stops. Rarely needed. |
 
-`AnalyticsConfig`: `source` (required), `endpoint`, `token`, `excludedCountries`, `flushIntervalMs` (30s), `batchSize` (100, the
-collector's ceiling), `queueCapacity` (2000), `spoolCapacity` (1000), `maxAttempts` (3),
-`connectTimeoutMs` / `readTimeoutMs` (10s), `logger` (silent; pass
-`LogcatLogger` while integrating).
+`AnalyticsOptions` mirrors the .NET client, which is this repository's reference: `ingestionUrl`
+(required), `token`, `seedInstallId`, `enabled`, `excludedCountries`, `context` — and the rest under
+`advanced` and `app`:
+
+```kotlin
+Analytics.start(this, AnalyticsOptions(
+    ingestionUrl = "https://analytics.example.com/myapp",
+    token = BuildConfig.ANALYTICS_TOKEN,
+    excludedCountries = setOf("KR"),
+    advanced = AnalyticsAdvancedOptions(queueCapacity = 4_000, logger = LogcatLogger),
+))
+```
+
+`advanced`: `flushIntervalMs` (30 s), `maxEventsPerWindow` (30), `rateWindowMs` (60 s), `batchSize`
+(100, the collector's ceiling), `queueCapacity` (4000), `maxAttempts` (3), `connectTimeoutMs` /
+`readTimeoutMs` (10 s each — `HttpURLConnection` has two timeouts where .NET names one), `spoolPath`
+(null: the app's files dir), `spoolCapacity` (1000, zero disables the spool), `installIdLifetimeMs`
+and `optOutLifetimeMs` (390 days each), `logger` (silent; pass `LogcatLogger` while integrating),
+`onError` (`(Throwable?, String, Boolean)`, called on every loss next to the log).
+`app`: `autoFlushOnBackground` (true).
 
 ## Failure behaviour
 

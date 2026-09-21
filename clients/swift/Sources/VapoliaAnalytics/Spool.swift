@@ -15,7 +15,7 @@ struct Spool: Sendable {
         let items: [Pending]
     }
 
-    private static let version = 1
+    private static let version = 2
 
     static func defaultURL(source: String) -> URL? {
         guard let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
@@ -24,13 +24,16 @@ struct Spool: Sendable {
         return caches.appendingPathComponent("vapolia-analytics-\(source).json")
     }
 
-    func save(_ items: [Pending]) {
+    /// Returns how many events did not fit, so the caller can count them as lost. The caller passes
+    /// them oldest first; beyond the cap the oldest are kept, being the ones a relaunch is meant to
+    /// recover.
+    @discardableResult
+    func save(_ items: [Pending]) -> Int {
         guard !items.isEmpty else {
             clear()
-            return
+            return 0
         }
 
-        // Beyond the cap the oldest are kept: they are the ones a relaunch is meant to recover.
         let kept = items.count > capacity ? Array(items.prefix(capacity)) : items
 
         do {
@@ -38,7 +41,10 @@ struct Spool: Sendable {
             try data.write(to: url, options: [.atomic])
         } catch {
             // Nothing to do about it, and nothing a caller could do either.
+            return items.count
         }
+
+        return items.count - kept.count
     }
 
     func load() -> [Pending] {

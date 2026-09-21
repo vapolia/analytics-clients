@@ -6,9 +6,13 @@ final class BatchTests: XCTestCase {
     private let installId = "11111111-0000-0000-0000-000011111111"
     private let timestamps = BatchEncoder.makeTimestampFormatter()
 
-    private func encode(device: Device, events: [Event]) throws -> String {
+    private func encode(
+        device: Device,
+        context: [String: PropValue] = [:],
+        events: [Event]
+    ) throws -> String {
         let data = try BatchEncoder.encode(
-            key: BatchKey(installId: installId, device: device),
+            key: BatchKey(installId: installId, device: device, context: context),
             events: events,
             timestamps: timestamps
         )
@@ -17,7 +21,7 @@ final class BatchTests: XCTestCase {
 
     func testEncodesTheBatchShapeTheCollectorExpects() throws {
         let json = try encode(
-            device: Device(platform: "ios", country: "FR"),
+            device: Device(country: "FR"),
             context: ["plan": "free"],
             events: [
                 Event(name: "app_open", ts: Date(timeIntervalSince1970: 1_757_500_000), props: [:]),
@@ -30,13 +34,39 @@ final class BatchTests: XCTestCase {
         )
 
         XCTAssertTrue(json.contains("\"installId\":\"\(installId)\""), json)
-        XCTAssertTrue(json.contains("\"platform\":\"ios\""), json)
         XCTAssertTrue(json.contains("\"country\":\"FR\""), json)
         XCTAssertTrue(json.contains("\"plan\":\"free\""), json)
         XCTAssertTrue(json.contains("\"moves\":34"), json)
         XCTAssertTrue(json.contains("\"result\":\"win\""), json)
-        // Nothing is sent for a field the device did not fill in.
-        XCTAssertFalse(json.contains("osVersion"), json)
+    }
+
+    /// The contract's closed list. This is the test that keeps the four clients from drifting apart
+    /// again: the platform, the build, the OS version, the device class, the store and the locale
+    /// come from the `Authorization` token, never the body.
+    func testTheBodyCarriesTheContractsFieldsAndNothingElse() throws {
+        let data = try BatchEncoder.encode(
+            key: BatchKey(installId: installId, device: Device(country: "FR"), context: ["plan": "free"]),
+            events: [Event(name: "app_open", ts: Date(timeIntervalSince1970: 0), props: ["a": 1])],
+            timestamps: timestamps
+        )
+
+        let body = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        XCTAssertEqual(Set(body.keys), ["installId", "country", "context", "events"])
+
+        let events = try XCTUnwrap(body["events"] as? [[String: Any]])
+        XCTAssertEqual(Set(events[0].keys), ["name", "ts", "props"], "plus `tz` when it is known")
+    }
+
+    /// A field the device did not fill in is absent, not null.
+    func testAnUnknownCountryIsNotSentAtAll() throws {
+        let json = try encode(
+            device: Device(),
+            events: [Event(name: "app_open", ts: Date(timeIntervalSince1970: 0), props: [:])]
+        )
+
+        XCTAssertFalse(json.contains("country"), json)
     }
 
     func testTimestampsAreIso8601InUtc() throws {

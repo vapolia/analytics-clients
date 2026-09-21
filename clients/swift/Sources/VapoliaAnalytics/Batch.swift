@@ -79,16 +79,11 @@ struct Pending: Hashable, Codable, Sendable {
     let event: Event
 }
 
-/// The wire shape of `POST /{source}`.
+/// The wire shape of `POST /{source}`: `installId`, `country`, `context`, `events` and nothing
+/// else. The platform and the build come from the `Authorization` token alone, never the body.
 struct BatchPayload: Encodable {
     let installId: String
-    let build: String?
-    let platform: String?
-    let osVersion: String?
-    let deviceClass: String?
-    let locale: String?
     let country: String?
-    let store: String?
     let context: [String: PropValue]?
     let events: [EventPayload]
 
@@ -101,13 +96,7 @@ struct BatchPayload: Encodable {
 
     init(key: BatchKey, events: [Event], timestamps: ISO8601DateFormatter) {
         installId = key.installId
-        build = key.device.build
-        platform = key.device.platform
-        osVersion = key.device.osVersion
-        deviceClass = key.device.deviceClass
-        locale = key.device.locale
         country = key.device.country
-        store = key.device.store
         context = key.context.isEmpty ? nil : key.context
 
         // Sorted by timestamp: events reach the buffer through concurrent tasks, so their arrival

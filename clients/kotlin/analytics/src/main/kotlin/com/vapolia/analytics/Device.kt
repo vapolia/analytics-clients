@@ -1,23 +1,16 @@
 package com.vapolia.analytics
 
 /**
- * Facts about the device, which the collector stores per event but which only change between
- * launches. All fields are optional, and [Analytics] fills most of them in. What is true of the
- * installation rather than of the device belongs in the batch context instead.
+ * What the body still says about the device: its region, and nothing else.
+ *
+ * The platform, the build, the OS version, the device class and the store come from the
+ * `Authorization` token, which names the build that was issued it — so no client sends them.
+ * [country] stays because it is the axis of the source's `excludedCountries` filter. Same shape as
+ * the .NET client's `Device` record.
  */
 data class Device(
-    /** Store build number, not the display version. */
-    val build: String? = null,
-    /** android | ios | maccatalyst | windows | web */
-    val platform: String? = null,
-    val osVersion: String? = null,
-    /** phone | tablet | desktop | other */
-    val deviceClass: String? = null,
-    val locale: String? = null,
-    /** ISO 3166-1 alpha-2, from the device locale. */
+    /** ISO 3166-1 alpha-2, from the device's **region setting** — never a geolocation of the IP. */
     val country: String? = null,
-    /** google | apple | other */
-    val store: String? = null,
 ) {
     /** The device reduced to what the collector will store, or null when the whole batch is refused. */
     internal fun clean(excludedCountries: Set<String> = emptySet()): Device? {
@@ -25,14 +18,6 @@ data class Device(
         if (country != null && excludedCountries.any { it.equals(country, ignoreCase = true) })
             return null
 
-        return Device(
-            build = Clean.text(build, MAX_BUILD_LENGTH),
-            platform = Clean.pick(platform, Clean.PLATFORMS),
-            osVersion = Clean.text(osVersion, MAX_OS_VERSION_LENGTH),
-            deviceClass = Clean.pick(deviceClass, Clean.DEVICE_CLASSES),
-            locale = Clean.text(locale, MAX_LOCALE_LENGTH),
-            country = country,
-            store = Clean.pick(store, Clean.STORES),
-        )
+        return Device(country = country)
     }
 }

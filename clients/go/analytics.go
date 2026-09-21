@@ -23,42 +23,70 @@ type Logger interface {
 	Error(format string, v ...any)
 }
 
-// Options configures a Client. Only Endpoint and Source are required.
+// Options configures a Client. Only IngestionUrl is required.
+//
+// The shape mirrors the .NET client, which is this repository's reference: the few options a caller
+// actually sets sit here, the rest in Advanced.
 type Options struct {
-	// Endpoint is the collector's base URL, e.g. "https://analytics.example.com".
-	Endpoint string
+	// IngestionUrl is the collector's ingestion URL — "https://baseUrl/sourceName". The last path
+	// segment is the source: the app's name, and the Postgres schema it maps to.
+	IngestionUrl string
 
-	// Source is the app's name: the URL segment, and the Postgres schema it maps to.
-	Source string
-
-	// HTTPClient defaults to a client with a 10s timeout.
-	HTTPClient *http.Client
-
-	// QueueSize is how many events may wait for the background sender. Beyond it Track drops rather
-	// than blocks. Default 4096.
-	QueueSize int
-
-	// BatchSize is how many events of one (install, device) group are sent in one request.
-	// Default and maximum 100, the collector's own per-batch ceiling.
-	BatchSize int
-
-	// FlushInterval is how often pending events are sent even when no batch is full. Default 30s.
-	FlushInterval time.Duration
-
-	// Token is a server token issued by the collector's admin service, sent as
-	// "Authorization: Bearer". It raises this caller's rate-limit ceiling and names its own os and
-	// build, which the collector stores in place of any device's.
+	// Token is the credential sent as "Authorization: Bearer" — a server token for server-to-server
+	// analytics, or a build token for device-to-server analytics. The collector tells the two apart
+	// from the token itself, not from how it arrived, so one field covers both roles.
 	Token string
 
-	// ExcludedCountries are ISO 3166-1 alpha-2 countries not measured at all: nothing is sent for a
-	// device whose region is one of them. Copy the source's excludedCountries.
+	// Enabled toggles collection. False makes New return a client that accepts and drops everything.
+	// It is a pointer so the zero Options still means enabled.
+	Enabled *bool
+
+	// ExcludedCountries are ISO 3166-1 alpha-2 countries excluded from the collection. Should be a
+	// copy of the exclusion list of the collector.
 	ExcludedCountries []string
+
+	// Context is what is true of the installation for a whole batch, asked for again on every event.
+	// Every key must be on the source's context whitelist. Optional.
+	Context func() map[string]any
+
+	// Advanced holds the uncommon options.
+	Advanced AdvancedOptions
+}
+
+// AdvancedOptions are the uncommon options. The defaults are the ones every client in this
+// repository ships.
+type AdvancedOptions struct {
+	// FlushInterval is how long events are buffered before they go out. Default 30s.
+	FlushInterval time.Duration
+
+	// MaxEventsPerWindow caps events accepted per RateWindow. Zero — the default here — disables it:
+	// one server process speaks for every visitor, so a per-process ceiling would throttle a whole
+	// site. The mobile clients default to 30.
+	MaxEventsPerWindow int
+
+	// RateWindow is the window MaxEventsPerWindow counts in. Fixed, not sliding. Default 60s.
+	RateWindow time.Duration
+
+	// BatchSize is how many events of one group are sent in one request. Default and maximum 100,
+	// the collector's own per-batch ceiling.
+	BatchSize int
+
+	// QueueCapacity is how many events may wait for the background sender. Beyond it Track drops
+	// rather than blocks. Default 4000.
+	QueueCapacity int
 
 	// MaxAttempts is how many times one request is tried before its events are dropped. Default 3.
 	MaxAttempts int
 
+	// HTTPClient is what the sender posts with; its Timeout is this client's RequestTimeout.
+	// Defaults to a client with a 10s timeout.
+	HTTPClient *http.Client
+
 	// Logger receives transport failures. Optional.
 	Logger Logger
+
+	// OnError is called on every loss, next to the log: (err, reason, permanent). Optional.
+	OnError func(err error, reason string, permanent bool)
 
 	// Now defaults to time.Now. Tests set it.
 	Now func() time.Time
@@ -76,14 +104,24 @@ type Stats struct {
 // Client queues events and sends them in the background. Safe for concurrent use.
 type Client struct {
 	opts     Options
+	adv      AdvancedOptions
 	endpoint string
+	source   string
 	excluded map[string]bool
+
+	enabled bool
 
 	queue    chan pending
 	flushReq chan chan struct{}
 	stop     chan struct{}
 	stopOnce sync.Once
 	done     chan struct{}
+
+	// The client's own ceiling, counted in a fixed window. Disabled by default here: one server
+	// process speaks for every visitor, so a per-process ceiling would throttle a whole site.
+	rateMu      sync.Mutex
+	windowStart time.Time
+	windowCount int
 
 	accepted, rejected, dropped, sent, requests atomic.Uint64
 }
@@ -106,30 +144,37 @@ var ErrClosed = errors.New("analytics: client closed")
 
 // New starts a client and its background sender. Close it to flush what is pending.
 func New(opts Options) (*Client, error) {
-	if strings.TrimSpace(opts.Endpoint) == "" {
-		return nil, errors.New("analytics: Endpoint is required")
+	url := strings.TrimRight(strings.TrimSpace(opts.IngestionUrl), "/")
+	if url == "" {
+		return nil, errors.New("analytics: IngestionUrl is required")
 	}
-	if strings.TrimSpace(opts.Source) == "" {
-		return nil, errors.New("analytics: Source is required")
+	// The app's name is the URL's last segment, exactly as in the .NET client.
+	source := url[strings.LastIndex(url, "/")+1:]
+	if source == "" || !strings.Contains(url, "://") {
+		return nil, errors.New("analytics: IngestionUrl must be https://baseUrl/sourceName")
 	}
 
-	if opts.HTTPClient == nil {
-		opts.HTTPClient = &http.Client{Timeout: 10 * time.Second}
+	adv := opts.Advanced
+	if adv.HTTPClient == nil {
+		adv.HTTPClient = &http.Client{Timeout: 10 * time.Second}
 	}
-	if opts.QueueSize <= 0 {
-		opts.QueueSize = 4096
+	if adv.QueueCapacity <= 0 {
+		adv.QueueCapacity = 4000
 	}
-	if opts.BatchSize <= 0 || opts.BatchSize > MaxEventsPerBatch {
-		opts.BatchSize = MaxEventsPerBatch
+	if adv.BatchSize <= 0 || adv.BatchSize > MaxEventsPerBatch {
+		adv.BatchSize = MaxEventsPerBatch
 	}
-	if opts.FlushInterval <= 0 {
-		opts.FlushInterval = 30 * time.Second
+	if adv.FlushInterval <= 0 {
+		adv.FlushInterval = 30 * time.Second
 	}
-	if opts.MaxAttempts <= 0 {
-		opts.MaxAttempts = 3
+	if adv.RateWindow <= 0 {
+		adv.RateWindow = 60 * time.Second
 	}
-	if opts.Now == nil {
-		opts.Now = time.Now
+	if adv.MaxAttempts <= 0 {
+		adv.MaxAttempts = 3
+	}
+	if adv.Now == nil {
+		adv.Now = time.Now
 	}
 
 	excluded := make(map[string]bool, len(opts.ExcludedCountries))
@@ -140,8 +185,11 @@ func New(opts Options) (*Client, error) {
 	c := &Client{
 		opts:     opts,
 		excluded: excluded,
-		endpoint: strings.TrimRight(opts.Endpoint, "/") + "/" + strings.Trim(opts.Source, "/"),
-		queue:    make(chan pending, opts.QueueSize),
+		enabled:  opts.Enabled == nil || *opts.Enabled,
+		adv:      adv,
+		endpoint: url,
+		source:   source,
+		queue:    make(chan pending, adv.QueueCapacity),
 		flushReq: make(chan chan struct{}),
 		stop:     make(chan struct{}),
 		done:     make(chan struct{}),
@@ -166,29 +214,48 @@ func (c *Client) TrackContext(installID string, device Device, context map[strin
 
 // track is the one path every Track goes through. tz is the UTC offset of the caller's own user, when the caller knows it.
 func (c *Client) track(installID string, device Device, context map[string]any, tz *int, name string, props map[string]any) {
+	if !c.enabled {
+		return
+	}
+
+	if !c.withinRate() {
+		c.dropped.Add(1)
+		c.report(nil, fmt.Sprintf("dropping %q: the rate window is saturated", name), false)
+		return
+	}
+
 	id, ok := cleanInstallID(installID)
 	if !ok {
 		c.rejected.Add(1)
+		c.report(nil, fmt.Sprintf("refusing %q: unusable install id", name), true)
 		return
 	}
 
 	eventName := text(name, MaxValueLength)
 	if eventName == "" {
 		c.rejected.Add(1)
+		c.report(nil, "refusing an event with an unusable name", true)
 		return
 	}
 
 	cleanDevice, ok := device.clean(c.excluded)
 	if !ok { // excluded country
 		c.rejected.Add(1)
+		c.report(nil, fmt.Sprintf("refusing %q: excluded country", name), true)
 		return
+	}
+
+	// The caller's own context wins; Options.Context is the fallback for a caller that has one
+	// answer for the whole process.
+	if context == nil && c.opts.Context != nil {
+		context = c.opts.Context()
 	}
 
 	item := pending{
 		key: batchKey{installID: id, device: cleanDevice, context: encodeContext(context)},
 		event: wireEvent{
 			Name:  eventName,
-			Ts:    c.opts.Now().UTC(),
+			Ts:    c.adv.Now().UTC(),
 			Props: cleanProps(props),
 			Tz:    cleanTz(tz),
 		},
@@ -200,7 +267,32 @@ func (c *Client) track(installID string, device Device, context map[string]any, 
 	default:
 		// Full queue: the collector is unreachable, or slower than we emit.
 		c.dropped.Add(1)
+		c.report(nil, fmt.Sprintf("dropping %q: the queue is full", name), false)
 	}
+}
+
+// withinRate is the client's own ceiling, counted in a fixed window: once it is full everything is
+// dropped until the window ends, rather than queued for a collector that would refuse the whole
+// address. Zero — the default here — disables it.
+func (c *Client) withinRate() bool {
+	if c.adv.MaxEventsPerWindow <= 0 {
+		return true
+	}
+
+	c.rateMu.Lock()
+	defer c.rateMu.Unlock()
+
+	now := c.adv.Now()
+	if now.Sub(c.windowStart) >= c.adv.RateWindow {
+		c.windowStart = now
+		c.windowCount = 0
+	}
+	if c.windowCount >= c.adv.MaxEventsPerWindow {
+		return false
+	}
+
+	c.windowCount++
+	return true
 }
 
 // Session binds an installation, its device and its batch context so call sites only carry the event.
@@ -288,7 +380,7 @@ func (c *Client) run() {
 	defer close(c.done)
 
 	buffers := make(map[batchKey][]wireEvent)
-	ticker := time.NewTicker(c.opts.FlushInterval)
+	ticker := time.NewTicker(c.adv.FlushInterval)
 	defer ticker.Stop()
 
 	for {
@@ -326,7 +418,7 @@ func (c *Client) drain(buffers map[batchKey][]wireEvent) {
 
 func (c *Client) buffer(buffers map[batchKey][]wireEvent, item pending) {
 	events := append(buffers[item.key], item.event)
-	if len(events) >= c.opts.BatchSize {
+	if len(events) >= c.adv.BatchSize {
 		delete(buffers, item.key)
 		c.send(item.key, events)
 		return
@@ -342,15 +434,36 @@ func (c *Client) flushAll(buffers map[batchKey][]wireEvent) {
 }
 
 func (c *Client) warnf(err error, format string, v ...any) {
-	if c.opts.Logger == nil {
-		return
+	reason := fmt.Sprintf(format, v...)
+	if c.adv.Logger != nil {
+		c.adv.Logger.Warn("analytics: %s: %v", reason, err)
 	}
-	c.opts.Logger.Warn("analytics: %s: %v", fmt.Sprintf(format, v...), err)
+	if c.adv.OnError != nil {
+		c.adv.OnError(err, reason, false)
+	}
+}
+
+// report is the loss path that has no error of its own: a refusal, a full queue, a saturated
+// window. It reaches the log and, when the caller asked for one, OnError.
+func (c *Client) report(err error, reason string, permanent bool) {
+	if c.adv.Logger != nil {
+		if permanent {
+			c.adv.Logger.Error("analytics: %s", reason)
+		} else {
+			c.adv.Logger.Warn("analytics: %s", reason)
+		}
+	}
+	if c.adv.OnError != nil {
+		c.adv.OnError(err, reason, permanent)
+	}
 }
 
 func (c *Client) errorf(err error, format string, v ...any) {
-	if c.opts.Logger == nil {
-		return
+	reason := fmt.Sprintf(format, v...)
+	if c.adv.Logger != nil {
+		c.adv.Logger.Error("analytics: %s: %v", reason, err)
 	}
-	c.opts.Logger.Error("analytics: %s: %v", fmt.Sprintf(format, v...), err)
+	if c.adv.OnError != nil {
+		c.adv.OnError(err, reason, true)
+	}
 }

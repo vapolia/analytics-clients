@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -18,7 +20,8 @@ const installID = "11111111-0000-0000-0000-000011111111"
 type collector struct {
 	mu       sync.Mutex
 	batches  []wireBatch
-	statuses []int // consumed in order; 204 once exhausted
+	raw      [][]byte // the bodies as received, for the contract test
+	statuses []int    // consumed in order; 204 once exhausted
 	header   http.Header
 }
 
@@ -30,6 +33,7 @@ func (c *collector) handler(w http.ResponseWriter, r *http.Request) {
 
 	c.mu.Lock()
 	c.batches = append(c.batches, batch)
+	c.raw = append(c.raw, body)
 	c.header = r.Header.Clone()
 	status := http.StatusNoContent
 	if len(c.statuses) > 0 {
@@ -46,6 +50,12 @@ func (c *collector) recorded() []wireBatch {
 	return append([]wireBatch(nil), c.batches...)
 }
 
+func (c *collector) bodies() [][]byte {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([][]byte(nil), c.raw...)
+}
+
 func newTestClient(t *testing.T, opts Options) (*Client, *collector) {
 	t.Helper()
 
@@ -53,12 +63,9 @@ func newTestClient(t *testing.T, opts Options) (*Client, *collector) {
 	server := httptest.NewServer(http.HandlerFunc(col.handler))
 	t.Cleanup(server.Close)
 
-	opts.Endpoint = server.URL
-	if opts.Source == "" {
-		opts.Source = "<sourceName>"
-	}
-	if opts.FlushInterval == 0 {
-		opts.FlushInterval = time.Hour // tests flush explicitly
+	opts.IngestionUrl = server.URL + "/testsource"
+	if opts.Advanced.FlushInterval == 0 {
+		opts.Advanced.FlushInterval = time.Hour // tests flush explicitly
 	}
 
 	client, err := New(opts)
@@ -84,7 +91,7 @@ func flush(t *testing.T, c *Client) {
 func TestSendsBatchWithGlobalProperties(t *testing.T) {
 	client, col := newTestClient(t, Options{})
 
-	device := Device{Platform: "Android", Country: "fr", DeviceClass: "phone"}
+	device := Device{Country: "fr"}
 	context := map[string]any{"plan": "premium"}
 	client.TrackContext(installID, device, context, "app_open", nil)
 	client.TrackContext(installID, device, context, "game_start", map[string]any{"mode": "solo", "moves": 12})
@@ -99,8 +106,8 @@ func TestSendsBatchWithGlobalProperties(t *testing.T) {
 	if b.InstallID != installID {
 		t.Errorf("installId = %q", b.InstallID)
 	}
-	if b.Platform != "android" || b.Country != "FR" {
-		t.Errorf("platform/country not normalized: %q %q", b.Platform, b.Country)
+	if b.Country != "FR" {
+		t.Errorf("country not normalized: %q", b.Country)
 	}
 	if got := string(b.Context); got != `{"plan":"premium"}` {
 		t.Errorf("context = %s", got)
@@ -119,10 +126,10 @@ func TestSendsBatchWithGlobalProperties(t *testing.T) {
 func TestGroupsByInstallAndDevice(t *testing.T) {
 	client, col := newTestClient(t, Options{})
 
-	client.Track(installID, Device{Platform: "ios"}, "app_open", nil)
-	client.Track(installID, Device{Platform: "ios"}, "game_start", nil)
-	client.Track(installID, Device{Platform: "ios", Build: "42"}, "app_open", nil)
-	client.Track("22222222-0000-0000-0000-000022222222", Device{Platform: "ios"}, "app_open", nil)
+	client.Track(installID, Device{Country: "FR"}, "app_open", nil)
+	client.Track(installID, Device{Country: "FR"}, "game_start", nil)
+	client.Track(installID, Device{Country: "DE"}, "app_open", nil)
+	client.Track("22222222-0000-0000-0000-000022222222", Device{Country: "FR"}, "app_open", nil)
 	flush(t, client)
 
 	batches := col.recorded()
@@ -132,7 +139,7 @@ func TestGroupsByInstallAndDevice(t *testing.T) {
 }
 
 func TestSendsWhenBatchIsFull(t *testing.T) {
-	client, col := newTestClient(t, Options{BatchSize: 5})
+	client, col := newTestClient(t, Options{Advanced: AdvancedOptions{BatchSize: 5}})
 
 	for range 5 {
 		client.Track(installID, Device{}, "app_open", nil)
@@ -218,7 +225,7 @@ func TestDropsNonScalarAndOversizedProps(t *testing.T) {
 }
 
 func TestRetriesThenGivesUp(t *testing.T) {
-	client, col := newTestClient(t, Options{MaxAttempts: 3})
+	client, col := newTestClient(t, Options{Advanced: AdvancedOptions{MaxAttempts: 3}})
 	col.statuses = []int{http.StatusInternalServerError, http.StatusInternalServerError, http.StatusInternalServerError}
 
 	client.Track(installID, Device{}, "app_open", nil)
@@ -245,7 +252,7 @@ func TestRetrySucceeds(t *testing.T) {
 }
 
 func TestUnknownSourceIsNotRetried(t *testing.T) {
-	client, col := newTestClient(t, Options{Source: "nope"})
+	client, col := newTestClient(t, Options{})
 	col.statuses = []int{http.StatusNotFound}
 
 	client.Track(installID, Device{}, "app_open", nil)
@@ -277,7 +284,7 @@ func TestCloseFlushesPendingEvents(t *testing.T) {
 
 func TestDropsStaleEvents(t *testing.T) {
 	now := time.Now().UTC()
-	client, col := newTestClient(t, Options{Now: func() time.Time { return now }})
+	client, col := newTestClient(t, Options{Advanced: AdvancedOptions{Now: func() time.Time { return now }}})
 
 	client.Track(installID, Device{}, "app_open", nil)
 	now = now.Add(MaxEventAge + time.Hour)
@@ -294,19 +301,19 @@ func TestDropsStaleEvents(t *testing.T) {
 func TestSessionTracks(t *testing.T) {
 	client, col := newTestClient(t, Options{})
 
-	session := client.For(installID, Device{Platform: "web"})
+	session := client.For(installID, Device{Country: "FR"})
 	session.Track("qr_reveal", map[string]any{"page": "home"})
 	flush(t, client)
 
 	batches := col.recorded()
-	if len(batches) != 1 || batches[0].Platform != "web" {
+	if len(batches) != 1 || batches[0].Country != "FR" {
 		t.Fatalf("unexpected batches: %+v", batches)
 	}
 }
 
 func TestQueueOverflowDropsInsteadOfBlocking(t *testing.T) {
 	// A queue of one and no sender running yet: the point is that Track returns either way.
-	client, _ := newTestClient(t, Options{QueueSize: 1})
+	client, _ := newTestClient(t, Options{Advanced: AdvancedOptions{QueueCapacity: 1}})
 
 	for range 200 {
 		client.Track(installID, Device{}, "app_open", nil)
@@ -319,11 +326,14 @@ func TestQueueOverflowDropsInsteadOfBlocking(t *testing.T) {
 }
 
 func TestNewValidatesOptions(t *testing.T) {
-	if _, err := New(Options{Source: "<sourceName>"}); err == nil {
-		t.Error("expected an error without Endpoint")
+	if _, err := New(Options{}); err == nil {
+		t.Error("expected an error without IngestionUrl")
 	}
-	if _, err := New(Options{Endpoint: "https://analytics.example.com"}); err == nil {
-		t.Error("expected an error without Source")
+	if _, err := New(Options{IngestionUrl: "myapp"}); err == nil {
+		t.Error("expected an error for a URL that is not https://baseUrl/sourceName")
+	}
+	if _, err := New(Options{IngestionUrl: "https://analytics.example.com/myapp"}); err != nil {
+		t.Errorf("expected a usable ingestion URL to be accepted: %v", err)
 	}
 }
 
@@ -343,8 +353,8 @@ func TestPostsJSONContentType(t *testing.T) {
 func TestSessionSendsTheTimeZoneOfItsUser(t *testing.T) {
 	client, col := newTestClient(t, Options{})
 
-	client.For(installID, Device{Platform: "web"}).WithTimeZone(120).Track("app_open", nil)
-	client.Track(installID, Device{Platform: "web"}, "game_end", nil)
+	client.For(installID, Device{Country: "FR"}).WithTimeZone(120).Track("app_open", nil)
+	client.Track(installID, Device{Country: "FR"}, "game_end", nil)
 	flush(t, client)
 
 	withTz, withoutTz := 0, 0
@@ -367,7 +377,7 @@ func TestAnOffsetOutsideTheRealRangeIsDropped(t *testing.T) {
 	client, col := newTestClient(t, Options{})
 
 	// Seconds sent for minutes.
-	client.For(installID, Device{Platform: "web"}).WithTimeZone(7200).Track("app_open", nil)
+	client.For(installID, Device{Country: "FR"}).WithTimeZone(7200).Track("app_open", nil)
 	flush(t, client)
 
 	for _, b := range col.recorded() {
@@ -376,5 +386,46 @@ func TestAnOffsetOutsideTheRealRangeIsDropped(t *testing.T) {
 				t.Errorf("tz = %d, want none", *e.Tz)
 			}
 		}
+	}
+}
+
+// TestBodyCarriesTheContractsFieldsAndNothingElse pins the contract's closed list. This is the test
+// that keeps the four clients from drifting apart again: the platform, the build, the OS version,
+// the device class, the store and the locale come from the Authorization token, never the body.
+func TestBodyCarriesTheContractsFieldsAndNothingElse(t *testing.T) {
+	client, col := newTestClient(t, Options{})
+
+	client.TrackContext(installID, Device{Country: "FR"}, map[string]any{"plan": "free"}, "app_open", nil)
+	flush(t, client)
+
+	bodies := col.bodies()
+	if len(bodies) != 1 {
+		t.Fatalf("expected one request, got %d", len(bodies))
+	}
+
+	var body map[string]json.RawMessage
+	if err := json.Unmarshal(bodies[0], &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	keys := slices.Sorted(maps.Keys(body))
+	if want := []string{"context", "country", "events", "installId"}; !slices.Equal(keys, want) {
+		t.Errorf("top-level keys = %v, want %v", keys, want)
+	}
+}
+
+// TestACountryItDoesNotKnowIsNotSentAtAll: an absent field, never a null one.
+func TestACountryItDoesNotKnowIsNotSentAtAll(t *testing.T) {
+	client, col := newTestClient(t, Options{})
+
+	client.Track(installID, Device{}, "app_open", nil)
+	flush(t, client)
+
+	var body map[string]json.RawMessage
+	if err := json.Unmarshal(col.bodies()[0], &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if _, ok := body["country"]; ok {
+		t.Errorf("country should not be in the body: %s", col.bodies()[0])
 	}
 }

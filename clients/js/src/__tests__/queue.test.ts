@@ -17,7 +17,7 @@ describe('Queue', () => {
 
   function options(overrides: Partial<ResolvedOptions> = {}): ResolvedOptions {
     return {
-      ...resolveOptions({ source: 'testsource', endpoint: 'https://analytics.example.com' }),
+      ...resolveOptions({ ingestionUrl: 'https://analytics.example.com/testsource' }),
       // Long enough that every test flushes explicitly.
       flushIntervalMs: 3_600_000,
       spoolDebounceMs: 5,
@@ -34,7 +34,7 @@ describe('Queue', () => {
     return new Queue(options(overrides), collector, spool, id, () => now);
   }
 
-  const device: Device = { platform: 'android', country: 'FR' };
+  const device: Device = { country: 'FR' };
 
   it('sends one batch carrying the global properties', async () => {
     const collector = new FakeCollector();
@@ -57,7 +57,7 @@ describe('Queue', () => {
 
     sender.track(device, 'app_open');
     sender.track(device, 'game_start');
-    sender.track({ ...device, build: '42' }, 'app_open');
+    sender.track({ country: 'DE' }, 'app_open');
     await sender.flush();
 
     expect(collector.bodies).toHaveLength(2);

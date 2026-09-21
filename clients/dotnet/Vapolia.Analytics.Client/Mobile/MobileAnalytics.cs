@@ -12,7 +12,7 @@ namespace Vapolia.Analytics.Client;
 /// MobileAnalytics.Current.Track("game_end", ("result", "win"), ("moves", 34));
 /// </code>
 ///
-/// With a container, call <c>services.AddAnalytics(o => o.Source = "&lt;sourceName&gt;")</c> instead and inject
+/// With a container, call <c>services.AddAnalytics(o => o.IngestionUrl = new("https://analytics.example.com/&lt;sourceName&gt;"))</c> instead and inject
 /// <see cref="IAnalytics"/>: it starts this same client and registers the identity with it.
 ///
 /// Either way the client owns the installation id, the device context and the flush when the app

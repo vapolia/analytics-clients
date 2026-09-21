@@ -5,14 +5,14 @@ import { resolveOptions, type Device, type ResolvedOptions } from '../core/types
 import { FakeCollector } from './support';
 
 const installId = '11111111-0000-0000-0000-000011111111';
-const device: Device = { platform: 'android' };
+const device: Device = {};
 
 describe('the per-window ceiling', () => {
   let now = 1_757_500_000_000;
 
   function queue(maxEventsPerWindow: number): Queue {
     const options: ResolvedOptions = {
-      ...resolveOptions({ source: 'testsource', endpoint: 'https://analytics.example.com' }),
+      ...resolveOptions({ ingestionUrl: 'https://analytics.example.com/testsource' }),
       flushIntervalMs: 3_600_000,
       maxEventsPerWindow,
       rateWindowMs: 60_000,

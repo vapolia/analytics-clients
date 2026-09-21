@@ -71,14 +71,9 @@ internal class Spool(private val file: File, private val capacity: Int) {
     private fun write(out: DataOutputStream, item: Pending) {
         out.writeUTF(item.key.installId)
 
-        val device = item.key.device
-        for (value in arrayOf(
-            device.build, device.platform, device.osVersion, device.deviceClass,
-            device.locale, device.country, device.store,
-        )) {
-            out.writeBoolean(value != null)
-            if (value != null) out.writeUTF(value)
-        }
+        val country = item.key.device.country
+        out.writeBoolean(country != null)
+        if (country != null) out.writeUTF(country)
         out.writeUTF(item.key.context)
 
         out.writeLong(item.event.tsMillis)
@@ -99,16 +94,7 @@ internal class Spool(private val file: File, private val capacity: Int) {
     private fun read(input: DataInputStream): Pending {
         val installId = input.readUTF()
 
-        val strings = Array(7) { if (input.readBoolean()) input.readUTF() else null }
-        val device = Device(
-            build = strings[0],
-            platform = strings[1],
-            osVersion = strings[2],
-            deviceClass = strings[3],
-            locale = strings[4],
-            country = strings[5],
-            store = strings[6],
-        )
+        val device = Device(country = if (input.readBoolean()) input.readUTF() else null)
         val context = input.readUTF()
 
         val ts = input.readLong()
@@ -131,7 +117,7 @@ internal class Spool(private val file: File, private val capacity: Int) {
     private companion object {
         const val MAGIC = 0x56414E31 // "VAN1"
         // Bumped with every layout change (2: batch context, 3: tz). A file written by an older layout is dropped, not read.
-        const val VERSION = 3
+        const val VERSION = 4
         const val TYPE_STRING = 1
         const val TYPE_BOOL = 2
         const val TYPE_NUMBER = 3

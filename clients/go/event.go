@@ -16,31 +16,21 @@ const (
 	MaxPropsPerEvent  = 12
 	MaxContextKeys    = 12
 	MaxValueLength    = 64
-	maxBuildLength    = 24
-	maxOsVersionLen   = 24
-	maxLocaleLength   = 12
 )
 
 // MaxEventAge is how far back the collector accepts a timestamp.
 const MaxEventAge = 7 * 24 * time.Hour
 
-var (
-	platforms     = set("android", "ios", "maccatalyst", "windows", "web")
-	deviceClasses = set("phone", "tablet", "desktop", "other")
-	stores        = set("google", "apple", "other")
-)
-
-// Device is what the app reported about the device it runs on. All fields are optional. What is
-// true of the installation rather than of the device belongs in the batch context instead.
+// Device is what the body still says about the device: its region, and nothing else.
+//
+// The platform, the build, the OS version, the device class and the store come from the
+// Authorization token, which names the build that was issued it — so no client sends them. Country
+// stays because it is the axis of the source's ExcludedCountries filter. Same shape as the .NET
+// client's Device record.
 type Device struct {
-	// Build is the store build number, not the display version.
-	Build       string
-	Platform    string // android | ios | maccatalyst | windows | web
-	OsVersion   string
-	DeviceClass string // phone | tablet | desktop | other
-	Locale      string
-	Country     string // ISO 3166-1 alpha-2, from the device locale
-	Store       string // google | apple | other
+	// Country is ISO 3166-1 alpha-2, from the device's region setting — never from the client
+	// address, and never a geolocation of the IP.
+	Country string
 }
 
 // clean returns the device reduced to what the collector will store, and whether the whole batch is
@@ -51,15 +41,7 @@ func (d Device) clean(excluded map[string]bool) (Device, bool) {
 		return Device{}, false
 	}
 
-	return Device{
-		Build:       text(d.Build, maxBuildLength),
-		Platform:    pick(d.Platform, platforms),
-		OsVersion:   text(d.OsVersion, maxOsVersionLen),
-		DeviceClass: pick(d.DeviceClass, deviceClasses),
-		Locale:      text(d.Locale, maxLocaleLength),
-		Country:     country,
-		Store:       pick(d.Store, stores),
-	}, true
+	return Device{Country: country}, true
 }
 
 func cleanProps(props map[string]any) map[string]any {
@@ -147,22 +129,6 @@ func cleanCountry(value string) string {
 		}
 	}
 	return strings.ToUpper(trimmed)
-}
-
-func pick(value string, allowed map[string]bool) string {
-	normalized := strings.ToLower(strings.TrimSpace(value))
-	if allowed[normalized] {
-		return normalized
-	}
-	return ""
-}
-
-func set(values ...string) map[string]bool {
-	m := make(map[string]bool, len(values))
-	for _, v := range values {
-		m[v] = true
-	}
-	return m
 }
 
 func sortedKeys(props map[string]any) []string {

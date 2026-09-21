@@ -1,15 +1,18 @@
 import { installId as cleanInstallId } from './clean';
-import type { AnalyticsStorage } from './types';
+import type { AnalyticsStorage, InstallSeed } from './types';
 
+/** The same keys as the .NET client, so the two agree on what a stored installation looks like. */
 const KEY_ID = 'vapolia.analytics.installId';
 const KEY_ISSUED_AT = 'vapolia.analytics.installIdIssuedAt';
+const KEY_FIRST_SEEN = 'vapolia.analytics.firstSeen';
 const KEY_FIRST_OPEN = 'vapolia.analytics.firstOpenSent';
 const KEY_OPTED_OUT = 'vapolia.analytics.optedOut';
+const KEY_OPTED_OUT_AT = 'vapolia.analytics.optedOutAt';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** 13 months is the legal ceiling, with no extension. The margin absorbs clock drift. */
-const MAX_AGE_MS = 390 * DAY_MS;
+export const DEFAULT_LIFETIME_MS = 390 * DAY_MS;
 
 /**
  * The installation id, and the two flags that go with it. The id is random, local, and renewed on
@@ -24,35 +27,74 @@ export class Identity {
   private optedOut = false;
   private firstOpenSent = true;
   private loaded = false;
+  private firstSeenAt: number | undefined;
 
   constructor(
     private readonly storage: AnalyticsStorage,
-    private readonly now: () => number = () => Date.now()
+    private readonly now: () => number = () => Date.now(),
+    private readonly idLifetimeMs: number = DEFAULT_LIFETIME_MS,
+    private readonly refusalLifetimeMs: number = DEFAULT_LIFETIME_MS,
+    private readonly seedInstallId?: () => InstallSeed | undefined
   ) {}
 
   /** Reads storage once, rotating the id if it reached its ceiling. */
   async load(): Promise<void> {
     if (this.loaded) return;
 
-    const [stored, issuedAtRaw, firstOpen, optedOut] = await Promise.all([
+    let [stored, issuedAtRaw, firstSeenRaw, firstOpen, optedOut, optedOutAtRaw] = await Promise.all([
       this.read(KEY_ID),
       this.read(KEY_ISSUED_AT),
+      this.read(KEY_FIRST_SEEN),
       this.read(KEY_FIRST_OPEN),
       this.read(KEY_OPTED_OUT),
+      this.read(KEY_OPTED_OUT_AT),
     ]);
 
     this.loaded = true;
-    this.optedOut = optedOut === 'true';
     this.firstOpenSent = firstOpen === 'true';
 
-    if (this.optedOut) return;
+    // Unlike the identifier, a refusal is refreshed on every visit rather than simply bounded: an
+    // opposition must not quietly lapse while the app is still in use.
+    this.optedOut = optedOut === 'true';
+    if (this.optedOut) {
+      const recordedAt = Number.parseInt(optedOutAtRaw ?? '', 10);
+      if (Number.isFinite(recordedAt) && this.now() - recordedAt >= this.refusalLifetimeMs) {
+        this.optedOut = false;
+        await this.remove(KEY_OPTED_OUT);
+        await this.remove(KEY_OPTED_OUT_AT);
+      } else {
+        await this.write(KEY_OPTED_OUT_AT, String(this.now()));
+        return;
+      }
+    }
 
     const today = this.now();
+
+    // An identity issued elsewhere, for a client migrating off another SDK. Only when this
+    // installation has none of its own.
+    if (cleanInstallId(stored) === undefined) {
+      const seed = this.seedInstallId?.();
+      const seeded = seed && cleanInstallId(seed.installId);
+      if (seed && seeded !== undefined) {
+        stored = seeded;
+        issuedAtRaw = String(seed.issuedAt);
+        firstSeenRaw = String(seed.firstSeen);
+        await this.write(KEY_ID, seeded);
+        await this.write(KEY_ISSUED_AT, issuedAtRaw);
+        await this.write(KEY_FIRST_SEEN, firstSeenRaw);
+      }
+    }
+
+    // The date this installation was first seen, kept across id renewals: a renewal is not a new
+    // installation, and counting it as one would inflate installs every 13 months.
+    const firstSeen = Number.parseInt(firstSeenRaw ?? '', 10);
+    this.firstSeenAt = Number.isFinite(firstSeen) ? firstSeen : today;
+    if (!Number.isFinite(firstSeen)) await this.write(KEY_FIRST_SEEN, String(today));
     const issuedAt = Number.parseInt(issuedAtRaw ?? '', 10);
     // A device clock moved backwards would otherwise freeze the id: reissue rather than extend.
     const expired =
       !Number.isFinite(issuedAt) ||
-      today - issuedAt >= MAX_AGE_MS ||
+      today - issuedAt >= this.idLifetimeMs ||
       issuedAt > today + DAY_MS;
 
     const valid = cleanInstallId(stored);
@@ -88,12 +130,19 @@ export class Identity {
     return this.optedOut;
   }
 
+  /** When the installation was first seen, or undefined before the first id was issued. */
+  firstSeen(): number | undefined {
+    return this.firstSeenAt;
+  }
+
   /**
    * Opting out forgets the id, so opting back in later cannot resume the same installation.
    */
   async setOptedOut(value: boolean): Promise<void> {
     this.optedOut = value;
     await this.write(KEY_OPTED_OUT, value ? 'true' : 'false');
+    if (value) await this.write(KEY_OPTED_OUT_AT, String(this.now()));
+    else await this.remove(KEY_OPTED_OUT_AT);
 
     if (!value) {
       if (this.id === undefined) {

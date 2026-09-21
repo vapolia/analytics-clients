@@ -27,21 +27,23 @@ final class SenderTests: XCTestCase {
         batchSize: Int = Limits.maxEventsPerBatch,
         maxAttempts: Int = 3,
         queueCapacity: Int = 2_000
-    ) -> AnalyticsConfig {
-        AnalyticsConfig(
-            source: "testsource",
-            // Long enough that every test flushes explicitly.
-            flushInterval: 3_600,
-            batchSize: batchSize,
-            queueCapacity: queueCapacity,
-            maxAttempts: maxAttempts
+    ) -> AnalyticsOptions {
+        AnalyticsOptions(
+            ingestionUrl: URL(string: "https://collector.invalid/testsource")!,
+            advanced: .init(
+                // Long enough that every test flushes explicitly.
+                flushInterval: 3_600,
+                batchSize: batchSize,
+                queueCapacity: queueCapacity,
+                maxAttempts: maxAttempts
+            )
         )
     }
 
     private func pending(
         _ name: String,
         installId: String? = nil,
-        device: Device = Device(platform: "ios"),
+        device: Device = Device(),
         ts: Date = Date(),
         props: [String: PropValue] = [:]
     ) -> Pending {
@@ -54,9 +56,9 @@ final class SenderTests: XCTestCase {
     func testSendsOneBatchCarryingTheGlobalProperties() async {
         let collector = FakeCollector()
         let counters = Counters()
-        let sender = Sender(config: config(), poster: collector, spool: nil, counters: counters)
+        let sender = Sender(options: config(), poster: collector, spool: nil, counters: counters)
 
-        let device = Device(platform: "ios", country: "FR")
+        let device = Device(country: "FR")
         await sender.add(pending("app_open", device: device))
         await sender.add(pending("game_end", device: device, props: ["result": "win", "moves": 34]))
         await sender.flush(persist: false)
@@ -72,11 +74,11 @@ final class SenderTests: XCTestCase {
 
     func testGroupsByInstallIdAndDevice() async {
         let collector = FakeCollector()
-        let sender = Sender(config: config(), poster: collector, spool: nil, counters: Counters())
+        let sender = Sender(options: config(), poster: collector, spool: nil, counters: Counters())
 
         await sender.add(pending("app_open"))
         await sender.add(pending("game_start"))
-        await sender.add(pending("app_open", device: Device(platform: "ios", build: "42")))
+        await sender.add(pending("app_open", device: Device(country: "DE")))
         await sender.add(pending("app_open", installId: otherInstallId))
         await sender.flush(persist: false)
 
@@ -86,7 +88,7 @@ final class SenderTests: XCTestCase {
 
     func testSendsAsSoonAsABatchIsFull() async {
         let collector = FakeCollector()
-        let sender = Sender(config: config(batchSize: 5), poster: collector, spool: nil, counters: Counters())
+        let sender = Sender(options: config(batchSize: 5), poster: collector, spool: nil, counters: Counters())
 
         for _ in 0..<5 {
             await sender.add(pending("app_open"))
@@ -103,7 +105,7 @@ final class SenderTests: XCTestCase {
         ])
         let counters = Counters()
         let sender = Sender(
-            config: config(maxAttempts: 2),
+            options: config(maxAttempts: 2),
             poster: collector,
             spool: nil,
             counters: counters
@@ -124,7 +126,7 @@ final class SenderTests: XCTestCase {
     func testDropsWhatARetryCannotFix() async {
         let collector = FakeCollector(answers: [.permanent(reason: "unknown source (404)")])
         let counters = Counters()
-        let sender = Sender(config: config(), poster: collector, spool: nil, counters: counters)
+        let sender = Sender(options: config(), poster: collector, spool: nil, counters: counters)
 
         await sender.add(pending("app_open"))
         await sender.flush(persist: false)
@@ -137,7 +139,7 @@ final class SenderTests: XCTestCase {
     func testDropsEventsOlderThanTheCollectorAccepts() async {
         let collector = FakeCollector()
         let counters = Counters()
-        let sender = Sender(config: config(), poster: collector, spool: nil, counters: counters)
+        let sender = Sender(options: config(), poster: collector, spool: nil, counters: counters)
 
         let stale = Date().addingTimeInterval(-Limits.maxEventAge - 60)
         await sender.add(pending("app_open", ts: stale))
@@ -156,7 +158,7 @@ final class SenderTests: XCTestCase {
 
         let failing = FakeCollector(answers: [.retry(after: 0, reason: "offline")])
         let first = Sender(
-            config: config(maxAttempts: 1),
+            options: config(maxAttempts: 1),
             poster: failing,
             spool: spool,
             counters: Counters()
@@ -170,7 +172,7 @@ final class SenderTests: XCTestCase {
         )
 
         let collector = FakeCollector()
-        let restarted = Sender(config: config(), poster: collector, spool: spool, counters: Counters())
+        let restarted = Sender(options: config(), poster: collector, spool: spool, counters: Counters())
         await restarted.start()
         await restarted.flush(persist: false)
         await restarted.stop()

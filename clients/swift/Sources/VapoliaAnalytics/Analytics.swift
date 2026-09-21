@@ -7,7 +7,7 @@ import UIKit
 /// The entry point. One call at launch, one call per event:
 ///
 /// ```swift
-/// Analytics.start(source: "<sourceName>")
+/// Analytics.start(ingestionUrl: URL(string: "https://analytics.example.com/<sourceName>")!)
 /// Analytics.track("game_end", ["result": "win", "moves": 34])
 /// ```
 ///
@@ -18,14 +18,14 @@ public final class Analytics: @unchecked Sendable {
     public static let shared = Analytics()
 
     private let lock = NSLock()
-    private var config: AnalyticsConfig?
+    private var options: AnalyticsOptions?
     private var sender: Sender?
     private var identity: InstallIdentity?
     private var counters = Counters()
     private var device = Device()
-    private var batchContext: ( () -> [String: PropValue])?
-    private var foregroundHandler: ( () -> Void)?
-    private var backgroundHandler: ( () -> Void)?
+    private var batchContext: (@Sendable () -> [String: PropValue]?)?
+    private var foregroundHandler: (@Sendable () -> Void)?
+    private var backgroundHandler: (@Sendable () -> Void)?
     private var observers: [NSObjectProtocol] = []
     private var warned = false
 
@@ -34,52 +34,76 @@ public final class Analytics: @unchecked Sendable {
     // MARK: - Lifecycle
 
     /// Starts the sender. Calling it twice is a no-op: the second call keeps the first configuration.
-    /// `endpoint` is the collector's base URL and has no default.
+    /// `ingestionUrl` is `https://baseUrl/sourceName` — the collector's URL for this app.
     @MainActor
-    public static func start(source: String, endpoint: String) {
-        start(AnalyticsConfig(source: source, endpoint: endpoint))
+    public static func start(ingestionUrl: URL) {
+        start(AnalyticsOptions(ingestionUrl: ingestionUrl))
     }
 
     @MainActor
-    public static func start(_ config: AnalyticsConfig) {
-        shared.start(config)
+    public static func start(_ options: AnalyticsOptions) {
+        shared.start(options)
     }
 
     @MainActor
-    private func start(_ config: AnalyticsConfig) {
+    private func start(_ options: AnalyticsOptions) {
         lock.lock()
         guard sender == nil else {
             lock.unlock()
             return
         }
 
-        guard let url = URL(string: config.endpoint.trimmingTrailingSlash() + "/" + config.source) else {
+        guard options.enabled else {
             lock.unlock()
-            config.logger?.error("\(config.endpoint) is not a usable endpoint: nothing will be sent")
             return
         }
 
-        let identity = InstallIdentity()
-        let counters = Counters()
-        let spool = Spool.defaultURL(source: config.source).map {
-            Spool(url: $0, capacity: config.spoolCapacity)
+        guard options.ingestionUrl.scheme != nil, !options.source.isEmpty else {
+            lock.unlock()
+            options.advanced.logger?.error(
+                "\(options.ingestionUrl) is not a usable ingestion URL — it must be "
+                    + "https://baseUrl/sourceName. Nothing will be sent."
+            )
+            return
         }
+
+        let identity = InstallIdentity(
+            idLifetime: options.advanced.installIdLifetime,
+            refusalLifetime: options.advanced.optOutLifetime
+        )
+        if let seed = options.seedInstallId?() {
+            identity.seed(seed)
+        }
+
+        let counters = Counters()
+        // Zero capacity is how an app turns the spool off, as in the .NET client.
+        let spool = options.advanced.spoolCapacity > 0
+            ? (options.advanced.spoolPath ?? Spool.defaultURL(source: options.source))
+                .map { Spool(url: $0, capacity: options.advanced.spoolCapacity) }
+            : nil
         let sender = Sender(
-            config: config,
-            poster: URLSessionPoster(url: url, timeout: config.requestTimeout, token: config.token),
+            options: options,
+            poster: URLSessionPoster(
+                url: options.ingestionUrl,
+                timeout: options.advanced.requestTimeout,
+                token: options.token
+            ),
             spool: spool,
             counters: counters
         )
 
-        self.config = config
+        self.options = options
         self.identity = identity
         self.counters = counters
         self.sender = sender
+        if let context = options.context {
+            batchContext = context
+        }
         device = DeviceProbe.detect()
         lock.unlock()
 
         Task { await sender.start() }
-        observeAppLifecycle()
+        observeAppLifecycle(options.app)
     }
 
     /// One last flush, then the sender stops. What it cannot send is left on disk for the next launch.
@@ -90,12 +114,14 @@ public final class Analytics: @unchecked Sendable {
 
     @MainActor
     private func stop() async {
-        lock.lock()
-        let sender = self.sender
-        let observers = self.observers
-        self.sender = nil
-        self.observers = []
-        lock.unlock()
+        // Through `locked`, not `lock.lock()`: NSLock is unavailable from an async context, and
+        // taking it around a non-async body is what makes that true here.
+        let (sender, observers) = locked { () -> (Sender?, [NSObjectProtocol]) in
+            let taken = (self.sender, self.observers)
+            self.sender = nil
+            self.observers = []
+            return taken
+        }
 
         observers.forEach { NotificationCenter.default.removeObserver($0) }
         await sender?.stop()
@@ -113,14 +139,14 @@ public final class Analytics: @unchecked Sendable {
         lock.lock()
         let sender = self.sender
         let identity = self.identity
-        let config = self.config
+        let options = self.options
         let counters = self.counters
         let device = self.device
         let alreadyWarned = warned
         warned = true
         lock.unlock()
 
-        guard let sender, let identity, let config else {
+        guard let sender, let identity, let options else {
             if !alreadyWarned {
                 print("[analytics] Analytics.start() was never called: \"\(name)\" and the next ones are ignored")
             }
@@ -130,20 +156,27 @@ public final class Analytics: @unchecked Sendable {
         guard !identity.optedOut else { return }
 
         guard counters.withinRate(
-            limit: config.maxEventsPerWindow,
-            window: config.rateWindow,
+            limit: options.advanced.maxEventsPerWindow,
+            window: options.advanced.rateWindow,
             now: Date()
-        ) else { return }
-
-        guard let installId = Clean.installId(identity.current()),
-              let eventName = Clean.text(name, maxLength: Limits.maxValueLength),
-              let cleanDevice = device.cleaned(excluding: config.excludedCountries)
-        else {
-            counters.rejected()
+        ) else {
+            report(options, nil, "dropping \"\(name)\": the rate window is saturated", permanent: false)
             return
         }
 
-        guard counters.reserve(limit: config.queueCapacity) else { return }
+        guard let installId = Clean.installId(identity.current()),
+              let eventName = Clean.text(name, maxLength: Limits.maxValueLength),
+              let cleanDevice = device.cleaned(excluding: options.excludedCountries)
+        else {
+            counters.rejected()
+            report(options, nil, "refusing \"\(name)\": unusable name, install id or country", permanent: true)
+            return
+        }
+
+        guard counters.reserve(limit: options.advanced.queueCapacity) else {
+            report(options, nil, "dropping \"\(name)\": the queue is full", permanent: false)
+            return
+        }
 
         let now = Date()
         let pending = Pending(
@@ -160,7 +193,9 @@ public final class Analytics: @unchecked Sendable {
                 tz: TimeZone.current.secondsFromGMT(for: now) / 60
             )
         )
-        Task { await sender.add(pending) }
+        // Not a `Task`: one per event would cost an allocation each and, worse, arrive in no
+        // particular order — an event tracked just before a flush could miss it.
+        sender.enqueue(pending)
     }
 
     /// Sends what is queued, without waiting for it.
@@ -197,9 +232,9 @@ public final class Analytics: @unchecked Sendable {
     }
 
     public static var stats: AnalyticsStats {
-        shared.lock.lock()
-        defer { shared.lock.unlock() }
-        return shared.counters.snapshot
+        // Only the field read needs our lock; `Counters` has its own, and nesting the two would
+        // impose a lock order for nothing.
+        shared.locked { shared.counters }.snapshot
     }
 
     /// Corrects what the device probe reported. Not for anything about the app itself, which belongs
@@ -212,7 +247,7 @@ public final class Analytics: @unchecked Sendable {
 
     /// What is true of the installation for a whole batch. Asked for again on every event, so an event
     /// carries the state it was produced under. Every key must be on the source's `context` whitelist.
-    public static var context: ( () -> [String: PropValue])? {
+    public static var context: (@Sendable () -> [String: PropValue]?)? {
         get { shared.currentContext }
         set {
             shared.lock.lock()
@@ -232,20 +267,42 @@ public final class Analytics: @unchecked Sendable {
         shared.currentIdentity?.markFirstOpenSent()
     }
 
+    /// When this installation was first seen, kept across id renewals. Feed it to ``InstallAge`` if
+    /// your source whitelists a bucket for it.
+    public static var firstSeen: Date? {
+        shared.currentIdentity?.firstSeen
+    }
+
+    /// Takes an identity issued elsewhere, for a client migrating off another SDK. Only before the
+    /// client ever issued one of its own; returns whether the seed was taken.
+    @discardableResult
+    public static func seed(_ seed: InstallSeed) -> Bool {
+        shared.currentIdentity?.seed(seed) ?? false
+    }
+
     /// The app returning to the foreground — where an app names its own `app_open`. It hangs off the
     /// notification observer the client already holds, rather than a second one.
-    public static var onForeground: ( () -> Void)? {
+    public static var onForeground: (@Sendable () -> Void)? {
         get { shared.locked { shared.foregroundHandler } }
         set { shared.locked { shared.foregroundHandler = newValue } }
     }
 
     /// The app leaving the foreground, just before the queue is flushed and written down.
-    public static var onBackground: ( () -> Void)? {
+    public static var onBackground: (@Sendable () -> Void)? {
         get { shared.locked { shared.backgroundHandler } }
         set { shared.locked { shared.backgroundHandler = newValue } }
     }
 
     // MARK: - Internals
+
+    private func report(_ options: AnalyticsOptions, _ error: Error?, _ reason: String, permanent: Bool) {
+        if permanent {
+            options.advanced.logger?.error(reason)
+        } else {
+            options.advanced.logger?.warn(reason)
+        }
+        options.advanced.onError?(error, reason, permanent)
+    }
 
     /// NSLock.withLock needs iOS 16; this package targets 15.
     private func locked<T>(_ body: () -> T) -> T {
@@ -254,7 +311,7 @@ public final class Analytics: @unchecked Sendable {
         return body()
     }
 
-    private var currentContext: ( () -> [String: PropValue])? {
+    private var currentContext: (@Sendable () -> [String: PropValue]?)? {
         lock.lock()
         defer { lock.unlock() }
         return batchContext
@@ -274,7 +331,7 @@ public final class Analytics: @unchecked Sendable {
 
     /// Leaving the foreground is the moment to write the queue down: the process may not come back.
     @MainActor
-    private func observeAppLifecycle() {
+    private func observeAppLifecycle(_ app: AnalyticsAppOptions) {
         #if canImport(UIKit)
         let center = NotificationCenter.default
 
@@ -293,8 +350,12 @@ public final class Analytics: @unchecked Sendable {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.locked { self?.backgroundHandler }?()
-            self?.flushInBackground()
+            guard let self else { return }
+            self.locked { self.backgroundHandler }?()
+            guard app.autoFlushOnBackground else { return }
+            // Delivered on the main queue, but the closure is not main-actor isolated and iOS 15
+            // predates `MainActor.assumeIsolated`: hop explicitly rather than assert.
+            Task { @MainActor in self.flushInBackground(app.backgroundScope) }
         }
 
         lock.lock()
@@ -303,14 +364,29 @@ public final class Analytics: @unchecked Sendable {
         #endif
     }
 
-    /// A backgrounded app gets a few seconds of network before it is suspended: the difference between
-    /// sending the session and spooling it to the next launch.
+    /// A backgrounded app gets a few seconds of network before it is suspended: the difference
+    /// between sending the session and spooling it to the next launch.
     @MainActor
-    private func flushInBackground() {
-        #if canImport(UIKit)
+    private func flushInBackground(
+        _ scope: (@Sendable (String) async -> (any AnalyticsBackgroundScope)?)?
+    ) {
         let sender = currentSender
+        let name = "vapolia.analytics.flush"
+
+        // An app that has its own way of holding the process alive passes it in; otherwise the
+        // client uses the only one UIKit offers.
+        if let scope {
+            Task { @MainActor in
+                let held = await scope(name)
+                await sender?.flush(persist: true)
+                await held?.end()
+            }
+            return
+        }
+
+        #if canImport(UIKit)
         var taskId = UIBackgroundTaskIdentifier.invalid
-        taskId = UIApplication.shared.beginBackgroundTask(withName: "vapolia.analytics.flush") {
+        taskId = UIApplication.shared.beginBackgroundTask(withName: name) {
             UIApplication.shared.endBackgroundTask(taskId)
             taskId = .invalid
         }
@@ -322,12 +398,8 @@ public final class Analytics: @unchecked Sendable {
                 taskId = .invalid
             }
         }
+        #else
+        Task { await sender?.flush(persist: true) }
         #endif
-    }
-}
-
-private extension String {
-    func trimmingTrailingSlash() -> String {
-        hasSuffix("/") ? String(dropLast()) : self
     }
 }

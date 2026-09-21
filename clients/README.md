@@ -33,6 +33,9 @@ contract by hand.
    assembling JSON by hand can.
 5. **Scalars only in `props` and `context`**: string (≤64 chars), finite number, bool. Max 12 each.
    `props` describes one event; `context` describes the installation for the whole batch, so a change of context starts another batch.
+   The body's top level is a **closed list** — `installId`, `country`, `context`, `events`, and nothing
+   else. Every client has a test asserting exactly that; a client sending a sixth key is a bug in that
+   client, not a variation.
 6. **`installId` is a device-generated UUID, rotated by the device**, never an account id or anything derived from one. 
    `country` is the device's region setting, never a geolocation of the IP.
 7. **No client emits an event of its own.** `first_open` and `app_open` are named and placed by the
@@ -63,7 +66,7 @@ contract by hand.
 }
 ```
 
-Every field but `installId` and `events` is optional — and `installId` too for a server sending under its server token: its events then belong to no installation (`install_id` NULL), and a batch without one and without a token is dropped. The platform and the build come from the `Authorization` token alone, never the body. `context` keys are the source's own: the
+Every field but `installId` and `events` is optional — and `installId` too for a server sending under its server token: its events then belong to no installation (`install_id` NULL), and a batch without one and without a token is dropped. The platform, the build, the OS version, the device class, the store **and the locale** come from the `Authorization` token alone, never the body: a build that names itself could name anything, and a token cannot. A deployment whose builds carry no token does not measure those axes at all — that is the price of the guarantee, and it is deliberate. `context` keys are the source's own: the
 collector stores it as one jsonb column and knows nothing about what is in it. `country` stays top-level because it is
 the axis of the source's `excludedCountries` filter — it is the one thing the body still says about the device.
 Anything a caller wants to add about its own client — a browser and its version, for a server relay — goes in `context`
@@ -80,13 +83,22 @@ when the app asks for a flush. Losses are counted, never reported: each client e
 | Situation | What a client does |
 |---|---|
 | Queue full | Drops the newest event, so the loss stays bounded and the caller unblocked. |
-| Own rate window saturated | Drops until the window ends, rather than getting the whole address throttled — which behind a carrier NAT hits every other installation. Disabled server-side, where one process speaks for every visitor. |
+| Own rate window saturated | Drops until the window ends, rather than getting the whole address throttled — which behind a carrier NAT hits every other installation. `maxEventsPerWindow` (30) counts in a fixed `rateWindow` (60 s), and zero disables it — which is the default server-side, where one process speaks for every visitor. |
 | `429`, `5xx`, network | Retried with backoff, a few attempts, then dropped — kept for the next flush on mobile. |
 | `404` and other `4xx` | Permanent, dropped at once. |
 
 The mobile and js clients write what is unsent to disk, so a restart resumes rather than loses. The
 js one spools a few hundred milliseconds after each event rather than on background alone: a JS
 runtime has no equivalent of `beginBackgroundTask`.
+
+Every client names these the same way, because the .NET client is the reference the others follow:
+`ingestionUrl` (`https://baseUrl/sourceName`), `token`, `enabled`, `excludedCountries`, `context`,
+`seedInstallId`, and — under `advanced` — `flushInterval` (30 s), `maxEventsPerWindow` (30),
+`rateWindow` (60 s), `batchSize` (100), `queueCapacity` (4000), `maxAttempts` (3), `requestTimeout`
+(10 s), `spoolPath`, `spoolCapacity` (1000), `installIdLifetime` and `optOutLifetime` (390 days
+each), `logger`, `onError`. Under `app`: `autoFlushOnBackground`. Each language keeps its own
+spelling for durations — `TimeSpan` in .NET, `TimeInterval` in Swift, a `…Ms` suffix in Kotlin and
+JS — and nothing else varies.
 
 Before sending, every client applies the collector's own ceilings — it applies them again on arrival,
 so this only keeps the wire free of what would be dropped there: 64 characters per event name,

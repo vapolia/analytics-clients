@@ -11,8 +11,7 @@ import (
 // The install id and the device context come from the client app.
 func Example() {
 	client, err := analytics.New(analytics.Options{
-		Endpoint: "https://analytics.example.com",
-		Source:   "<sourceName>",
+		IngestionUrl: "https://analytics.example.com/<sourceName>",
 	})
 	if err != nil {
 		return
@@ -23,12 +22,9 @@ func Example() {
 		_ = client.Close(ctx)
 	}()
 
-	device := analytics.Device{
-		Platform:    "android",
-		Country:     "FR",
-		DeviceClass: "phone",
-		Build:       "1042",
-	}
+	// The region setting the app reported, and nothing else: the platform and the build come from
+	// the Authorization token.
+	device := analytics.Device{Country: "FR"}
 
 	// The batch context is what the app reported about the installation, whitelisted per source.
 	session := client.

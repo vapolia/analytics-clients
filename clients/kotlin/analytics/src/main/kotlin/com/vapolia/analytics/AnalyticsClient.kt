@@ -13,7 +13,7 @@ import java.util.concurrent.atomic.AtomicLong
  * be tested on the JVM, without an emulator.
  */
 internal class AnalyticsClient(
-    private val config: AnalyticsConfig,
+    private val options: AnalyticsOptions,
     private val transport: Transport,
     private val spool: Spool?,
     private val clock: () -> Long = System::currentTimeMillis,
@@ -65,13 +65,13 @@ internal class AnalyticsClient(
 
         val id = Clean.installId(installId)
         val eventName = Clean.text(name, MAX_VALUE_LENGTH)
-        val cleanDevice = device.clean(config.excludedCountries)
+        val cleanDevice = device.clean(options.excludedCountries)
         if (id == null || eventName == null || cleanDevice == null) {
             rejected.incrementAndGet()
             return
         }
 
-        if (held.get() >= config.queueCapacity) {
+        if (held.get() >= options.advanced.queueCapacity) {
             // Full queue: the collector is unreachable, or slower than we emit.
             dropped.incrementAndGet()
             return
@@ -97,15 +97,15 @@ internal class AnalyticsClient(
      */
     @Synchronized
     private fun withinRate(): Boolean {
-        if (config.maxEventsPerWindow <= 0) return true
+        if (options.advanced.maxEventsPerWindow <= 0) return true
 
         val now = clock()
-        if (now - windowStart >= config.rateWindowMs) {
+        if (now - windowStart >= options.advanced.rateWindowMs) {
             windowStart = now
             windowCount = 0
         }
 
-        if (windowCount >= config.maxEventsPerWindow) return false
+        if (windowCount >= options.advanced.maxEventsPerWindow) return false
 
         windowCount++
         return true
@@ -155,18 +155,18 @@ internal class AnalyticsClient(
                 .forEach { buffer(buffers, it, counted = false) }
         }
 
-        var nextFlush = clock() + config.flushIntervalMs
+        var nextFlush = clock() + options.advanced.flushIntervalMs
         while (true) {
             val wait = (nextFlush - clock()).coerceAtLeast(0)
             when (val command = commands.poll(wait, TimeUnit.MILLISECONDS)) {
                 null -> {
                     flushAll(buffers, encoder)
-                    nextFlush = clock() + config.flushIntervalMs
+                    nextFlush = clock() + options.advanced.flushIntervalMs
                 }
 
                 is Command.Add -> {
                     val events = buffer(buffers, command.pending, counted = true)
-                    if (events.size >= config.batchSize) {
+                    if (events.size >= options.advanced.batchSize) {
                         buffers.remove(command.pending.key)
                         keep(buffers, command.pending.key, send(command.pending.key, events, encoder))
                     }
@@ -177,7 +177,7 @@ internal class AnalyticsClient(
                     flushAll(buffers, encoder)
                     if (command.persist) persist(buffers)
                     command.done.countDown()
-                    nextFlush = clock() + config.flushIntervalMs
+                    nextFlush = clock() + options.advanced.flushIntervalMs
                 }
 
                 is Command.Clear -> {
@@ -233,7 +233,7 @@ internal class AnalyticsClient(
         val groups = buffers.toList()
         buffers.clear()
         for ((key, events) in groups) {
-            for (chunk in events.chunked(config.batchSize))
+            for (chunk in events.chunked(options.advanced.batchSize))
                 keep(buffers, key, send(key, chunk, encoder))
         }
     }
@@ -246,7 +246,7 @@ internal class AnalyticsClient(
     ) {
         if (events.isEmpty()) return
 
-        val room = config.queueCapacity - buffers.values.sumOf { it.size }
+        val room = options.advanced.queueCapacity - buffers.values.sumOf { it.size }
         val kept = if (events.size > room) events.take(room.coerceAtLeast(0)) else events
         if (kept.size < events.size) {
             val lost = events.size - kept.size
@@ -292,12 +292,12 @@ internal class AnalyticsClient(
                 }
 
                 is SendResult.Retry -> {
-                    if (attempt >= config.maxAttempts || !sleep(backoff(attempt, result.afterMs))) {
+                    if (attempt >= options.advanced.maxAttempts || !sleep(backoff(attempt, result.afterMs))) {
                         // Kept, not dropped: a failed send on a phone usually means no network.
-                        config.logger?.warn("analytics: keeping ${fresh.size} events: ${result.reason}")
+                        options.advanced.logger?.warn("analytics: keeping ${fresh.size} events: ${result.reason}")
                         return fresh
                     }
-                    config.logger?.warn("analytics: retrying ${fresh.size} events: ${result.reason}")
+                    options.advanced.logger?.warn("analytics: retrying ${fresh.size} events: ${result.reason}")
                     attempt++
                 }
             }
@@ -307,14 +307,14 @@ internal class AnalyticsClient(
     private fun discard(events: List<Event>, message: String, error: Throwable?) {
         dropped.addAndGet(events.size.toLong())
         held.addAndGet(-events.size)
-        config.logger?.error("analytics: $message", error)
+        options.advanced.logger?.error("analytics: $message", error)
     }
 
     private fun persist(buffers: Map<BatchKey, MutableList<Event>>) {
         val disk = spool ?: return
         val items = buffers.flatMap { (key, events) -> events.map { Pending(key, it) } }
         runCatching { disk.save(items) }
-            .onFailure { config.logger?.error("analytics: cannot spool ${items.size} events", it) }
+            .onFailure { options.advanced.logger?.error("analytics: cannot spool ${items.size} events", it) }
     }
 
     /** Waits, and reports false if the client is stopping. */

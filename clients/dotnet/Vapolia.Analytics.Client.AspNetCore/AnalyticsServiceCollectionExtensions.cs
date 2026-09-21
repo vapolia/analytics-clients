@@ -14,7 +14,7 @@ public static class AnalyticsServiceCollectionExtensions
     
     /// <summary>
     /// <code>
-    /// builder.Services.AddAnalytics(o => o.Source = "&lt;sourceName&gt;");
+    /// builder.Services.AddAnalytics(o => o.IngestionUrl = new("https://analytics.example.com/&lt;sourceName&gt;"));
     /// ...
     /// app.UseAnalytics();
     /// </code>
@@ -33,7 +33,7 @@ public static class AnalyticsServiceCollectionExtensions
             // which can still set it back.
             .Configure(o => o.AdvancedOptions.MaxEventsPerWindow = 0)
             .Configure(configure)
-            .Validate(o => !o.Enabled || !o.IngestionUrl.IsAbsoluteUri, $"{nameof(AnalyticsOptions)}.{nameof(AnalyticsOptions.IngestionUrl)} is required and must be an absolute URL");
+            .Validate(o => !o.Enabled || o.IngestionUrl.IsAbsoluteUri, $"{nameof(AnalyticsOptions)}.{nameof(AnalyticsOptions.IngestionUrl)} is required and must be an absolute URL");
 
         services.AddHttpContextAccessor();
         services.TryAddScoped<CookieInstallIdentityProvider>();

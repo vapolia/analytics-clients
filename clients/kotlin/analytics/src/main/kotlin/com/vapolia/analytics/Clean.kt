@@ -5,18 +5,11 @@ internal const val MAX_EVENTS_PER_BATCH = 100
 internal const val MAX_PROPS_PER_EVENT = 12
 internal const val MAX_CONTEXT_KEYS = 12
 internal const val MAX_VALUE_LENGTH = 64
-internal const val MAX_BUILD_LENGTH = 24
-internal const val MAX_OS_VERSION_LENGTH = 24
-internal const val MAX_LOCALE_LENGTH = 12
 
 /** How far back the collector accepts a timestamp. Older events are dropped instead of sent. */
 internal const val MAX_EVENT_AGE_MS = 7L * 24 * 60 * 60 * 1000
 
 internal object Clean {
-    val PLATFORMS = setOf("android", "ios", "maccatalyst", "windows", "web")
-    val DEVICE_CLASSES = setOf("phone", "tablet", "desktop", "other")
-    val STORES = setOf("google", "apple", "other")
-
     /**
      * Trims, caps the length, strips control characters, and turns blank into null. The control pass
      * is not cosmetic: Postgres rejects U+0000 in `text` and `jsonb`.
@@ -40,11 +33,6 @@ internal object Clean {
         if (trimmed.length != 2 || !trimmed.all { it in 'a'..'z' || it in 'A'..'Z' })
             return null
         return trimmed.uppercase()
-    }
-
-    fun pick(value: String?, allowed: Set<String>): String? {
-        val normalized = value?.trim()?.lowercase() ?: return null
-        return if (normalized in allowed) normalized else null
     }
 
     /** The canonical UUID form only, and never the nil UUID. */

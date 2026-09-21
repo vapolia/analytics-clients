@@ -18,7 +18,7 @@ final class SpoolTests: XCTestCase {
         Pending(
             key: BatchKey(
                 installId: "11111111-0000-0000-0000-000011111111",
-                device: Device(platform: "ios", country: "FR"),
+                device: Device(country: "FR"),
                 context: ["plan": "premium"]
             ),
             event: Event(

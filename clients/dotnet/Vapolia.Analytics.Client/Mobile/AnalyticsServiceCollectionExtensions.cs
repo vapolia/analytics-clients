@@ -22,7 +22,7 @@ public static class AnalyticsServiceCollectionExtensions
     /// </remarks>
     /// <example>
     /// <code>
-    /// builder.UseAnalytics(o => o.Source = "&lt;sourceName&gt;");
+    /// builder.UseAnalytics(o => o.IngestionUrl = new("https://analytics.example.com/&lt;sourceName&gt;"));
     /// </code>
     /// </example>
     public static IHostApplicationBuilder UseAnalytics(this IHostApplicationBuilder builder, Action<AnalyticsOptions> configure)

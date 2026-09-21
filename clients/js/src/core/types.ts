@@ -4,23 +4,28 @@ export type PropValue = string | number | boolean;
 export type Props = Record<string, PropValue | null | undefined>;
 
 /**
- * Facts about the device, which the collector stores per event but which only change between
- * launches. Every field is optional, and the client fills most of them in. What is true of the
- * installation rather than of the device belongs in the batch `Context` instead.
+ * What the body still says about the device: its region, and nothing else.
+ *
+ * The platform, the build, the OS version, the device class and the store come from the
+ * `Authorization` token, which names the build that was issued it — so no client sends them.
+ * `country` stays because it is the axis of the source's `excludedCountries` filter. Same shape as
+ * the .NET client's `Device` record.
  */
 export interface Device {
-  /** Store build number, not the display version. */
-  build?: string;
-  /** android | ios | maccatalyst | windows | web */
-  platform?: string;
-  osVersion?: string;
-  /** phone | tablet | desktop | other */
-  deviceClass?: string;
-  locale?: string;
-  /** ISO 3166-1 alpha-2, from the device locale. */
+  /** ISO 3166-1 alpha-2, from the device's **region setting** — never a geolocation of the IP. */
   country?: string;
-  /** google | apple | other */
-  store?: string;
+}
+
+/**
+ * An installation identity that comes from somewhere else — a client being migrated off another
+ * SDK, which already has an id and a first-seen date worth keeping.
+ */
+export interface InstallSeed {
+  installId: string;
+  /** Milliseconds since the epoch. */
+  issuedAt: number;
+  /** Milliseconds since the epoch. */
+  firstSeen: number;
 }
 
 /**
@@ -72,7 +77,10 @@ export interface AnalyticsStats {
   accepted: number;
   /** Refused by `track`: opted out, excluded country, unusable event name. */
   rejected: number;
-  /** Accepted then lost: full queue, or a permanently refused request. */
+  /**
+   * Lost rather than sent: a saturated rate window, a full queue, a full spool, an event older than
+   * the collector accepts, or a permanently refused request.
+   */
   dropped: number;
   /** Events the collector answered 2xx for. */
   sent: number;
@@ -80,105 +88,179 @@ export interface AnalyticsStats {
   requests: number;
 }
 
+/**
+ * Client configuration. `ingestionUrl` is the only thing without a default.
+ *
+ * The shape mirrors the .NET client, which is this repository's reference: the few options an app
+ * actually sets sit here, the rest in `advanced` and `app`.
+ */
 export interface AnalyticsOptions {
-  /** The app's name: the URL segment, and the Postgres schema it maps to. */
-  source: string;
-
   /**
-   * The collector's base URL, e.g. "https://analytics.example.com". The source is appended to it.
+   * The collector's ingestion URL — `https://baseUrl/sourceName`. The last path segment is the
+   * source: the app's name, and the Postgres schema it maps to.
+   *
    * Required: a default here would live in the published package, so moving the collector would mean
    * republishing it and waiting for every app to update before the old host could go.
    */
-  endpoint: string;
+  ingestionUrl: string;
 
   /**
-   * The token issued for this build by the collector's admin service, as a CI step, and embedded in
-   * the app. Sent as `Authorization: Bearer`, it replaces the platform and build number in every
-   * batch, so a build cannot be invented and can be excluded. Public by nature, not a credential. A
-   * source that requires one answers 401 without.
+   * The credential sent as `Authorization: Bearer` — a server token for server-to-server analytics,
+   * or a build token for device-to-server analytics. The collector tells the two apart from the
+   * token itself, not from how it arrived, so one property covers both roles.
    */
   token?: string;
 
   /**
-   * ISO 3166-1 alpha-2 countries not measured at all: nothing is sent from a device whose region is
-   * one of them. Copy the source's `excludedCountries`.
+   * The identity of this installation, when it comes from somewhere else — a client being migrated
+   * off another SDK. Read once, at startup, and only if nothing is stored yet.
+   */
+  seedInstallId?: () => InstallSeed | undefined;
+
+  /** Toggles collection of analytics. False makes `start` a no-op. */
+  enabled?: boolean;
+
+  /**
+   * ISO 3166-1 alpha-2 countries excluded from the collection. Should be a copy of the exclusion
+   * list of the collector (the analytics server).
    */
   excludedCountries?: string[];
 
-  /** How often pending events are sent even when no batch is full. Milliseconds. */
+  /**
+   * Context sent with each batch of events, asked for again on every event: these change while the
+   * app runs, and an event must carry the state it was produced under. Every key must be on the
+   * source's `context` whitelist.
+   */
+  context?: () => Context | undefined;
+
+  /** Uncommon options. */
+  advanced?: AnalyticsAdvancedOptions;
+
+  /** Uncommon apps-only options. */
+  app?: AnalyticsAppOptions;
+}
+
+/** Uncommon options. The defaults are the ones every client in this repository ships. */
+export interface AnalyticsAdvancedOptions {
+  /** How long events are buffered before they go out. */
   flushIntervalMs?: number;
 
-  /** Events of one device context per request. Capped at the collector's own ceiling. */
-  batchSize?: number;
-
-  /** Events waiting for the sender. Beyond it `track` drops rather than blocks. */
-  queueCapacity?: number;
-
   /**
-   * Events accepted per `rateWindowMs`. Beyond it everything is dropped until the window ends.
-   *
-   * An installation emitting hundreds of events a minute is a bug, and queueing them would get its
-   * whole client address throttled by the collector — which on a carrier-NAT address means every
-   * other installation behind it too. Zero disables it.
+   * Max events accepted per `rateWindowMs`. Beyond it everything is dropped until the window ends.
+   * Zero disables it. It keeps a buggy installation from getting its whole client address throttled
+   * by the collector, which behind a carrier NAT would hit every other installation.
    */
   maxEventsPerWindow?: number;
 
   /** The window `maxEventsPerWindow` counts in. Fixed, not sliding. */
   rateWindowMs?: number;
 
-  /** Events kept in storage across process death. */
+  /** Max events to send per batch. Capped at the collector's own ceiling. */
+  batchSize?: number;
+
+  /** Max events that can wait to be sent. Beyond it `track` drops rather than blocks. */
+  queueCapacity?: number;
+
+  /** Max attempts to send a batch before it is given up on. */
+  maxAttempts?: number;
+
+  requestTimeoutMs?: number;
+
+  /** Events kept in storage across process death. Zero disables the spool. */
   spoolCapacity?: number;
 
   /**
    * How long after an event the queue is written to storage. The JS engine is suspended shortly
    * after the app backgrounds, so the spool — not the background flush — is what actually survives.
+   * This client's own option: it stands in for the `beginBackgroundTask` it does not have.
    */
   spoolDebounceMs?: number;
 
-  /** Attempts per request before a batch is given up on (kept for later if the failure was transient). */
-  maxAttempts?: number;
+  /** 13 months minus a margin for clock drift — the legal ceiling, with no extension. */
+  installIdLifetimeMs?: number;
 
-  requestTimeoutMs?: number;
-
-  /**
-   * What is true of the installation for a whole batch, asked for again on every event: these change
-   * while the app runs, and an event must carry the state it was produced under.
-   */
-  context?: () => Context | undefined;
+  /** How long a refusal is remembered. Unlike the identifier, it is refreshed on every visit. */
+  optOutLifetimeMs?: number;
 
   /**
-   * The device context. What is not given here is detected, when the matching `expo-*` package is
-   * installed. Pass it in full to depend on no Expo package at all.
+   * The device context. Only `country` is sent; what is not given here is detected when
+   * `expo-localization` is installed.
    */
   device?: Device;
 
   logger?: AnalyticsLogger;
+
+  /**
+   * Called on every loss, next to the log: `(error, reason, permanent)`. Can be used to notify the
+   * user that an issue is ongoing.
+   */
+  onError?: (error: unknown, reason: string, permanent: boolean) => void;
 }
 
-export type ResolvedOptions = Required<
-  Omit<AnalyticsOptions, 'device' | 'logger'>
-> & {
+/** Uncommon apps-only options. */
+export interface AnalyticsAppOptions {
+  /**
+   * Whether the client flushes and spools when the app goes to the background. On a JS runtime this
+   * is best effort — the engine is suspended shortly after — which is what `spoolDebounceMs` covers.
+   */
+  autoFlushOnBackground?: boolean;
+}
+
+/** The flat shape the internals work with, with every default already applied. */
+export interface ResolvedOptions {
+  ingestionUrl: string;
+  source: string;
+  token: string;
+  seedInstallId?: () => InstallSeed | undefined;
+  enabled: boolean;
+  excludedCountries: string[];
+  context: () => Context | undefined;
+  flushIntervalMs: number;
+  maxEventsPerWindow: number;
+  rateWindowMs: number;
+  batchSize: number;
+  queueCapacity: number;
+  maxAttempts: number;
+  requestTimeoutMs: number;
+  spoolCapacity: number;
+  spoolDebounceMs: number;
+  installIdLifetimeMs: number;
+  optOutLifetimeMs: number;
   device: Device;
   logger?: AnalyticsLogger;
-};
+  onError?: (error: unknown, reason: string, permanent: boolean) => void;
+  autoFlushOnBackground: boolean;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function resolveOptions(options: AnalyticsOptions): ResolvedOptions {
+  const advanced = options.advanced ?? {};
+  const app = options.app ?? {};
+
   return {
-    source: options.source,
-    endpoint: options.endpoint,
+    ingestionUrl: options.ingestionUrl.replace(/\/+$/, ''),
+    // The app's name is the URL's last segment, exactly as in the .NET client.
+    source: options.ingestionUrl.replace(/\/+$/, '').split('/').pop() ?? '',
     token: options.token ?? '',
+    seedInstallId: options.seedInstallId,
+    enabled: options.enabled ?? true,
     excludedCountries: options.excludedCountries ?? [],
-    flushIntervalMs: options.flushIntervalMs ?? 30_000,
-    batchSize: Math.min(options.batchSize ?? 100, 100),
-    queueCapacity: options.queueCapacity ?? 2_000,
-    maxEventsPerWindow: options.maxEventsPerWindow ?? 30,
-    rateWindowMs: options.rateWindowMs ?? 60_000,
-    spoolCapacity: options.spoolCapacity ?? 1_000,
-    spoolDebounceMs: options.spoolDebounceMs ?? 500,
-    maxAttempts: options.maxAttempts ?? 3,
-    requestTimeoutMs: options.requestTimeoutMs ?? 10_000,
     context: options.context ?? (() => undefined),
-    device: options.device ?? {},
-    logger: options.logger,
+    flushIntervalMs: advanced.flushIntervalMs ?? 30_000,
+    maxEventsPerWindow: advanced.maxEventsPerWindow ?? 30,
+    rateWindowMs: advanced.rateWindowMs ?? 60_000,
+    batchSize: Math.min(advanced.batchSize ?? 100, 100),
+    queueCapacity: advanced.queueCapacity ?? 4_000,
+    maxAttempts: advanced.maxAttempts ?? 3,
+    requestTimeoutMs: advanced.requestTimeoutMs ?? 10_000,
+    spoolCapacity: advanced.spoolCapacity ?? 1_000,
+    spoolDebounceMs: advanced.spoolDebounceMs ?? 500,
+    installIdLifetimeMs: advanced.installIdLifetimeMs ?? 390 * DAY_MS,
+    optOutLifetimeMs: advanced.optOutLifetimeMs ?? 390 * DAY_MS,
+    device: advanced.device ?? {},
+    logger: advanced.logger,
+    onError: advanced.onError,
+    autoFlushOnBackground: app.autoFlushOnBackground ?? true,
   };
 }

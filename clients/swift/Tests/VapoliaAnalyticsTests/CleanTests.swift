@@ -21,12 +21,6 @@ final class CleanTests: XCTestCase {
         XCTAssertNil(Clean.country(nil))
     }
 
-    func testPickKeepsWhitelistedValuesOnly() {
-        XCTAssertEqual(Clean.pick(" iOS ", from: Clean.platforms), "ios")
-        XCTAssertNil(Clean.pick("symbian", from: Clean.platforms))
-        XCTAssertNil(Clean.pick(nil, from: Clean.platforms))
-    }
-
     func testInstallIdIsACanonicalNonNilUuid() {
         XCTAssertEqual(
             Clean.installId("11111111-0000-0000-0000-000011111111"),
@@ -78,13 +72,8 @@ final class CleanTests: XCTestCase {
     }
 
     func testDeviceNormalizesAndRefusesExcludedCountries() throws {
-        let clean = try XCTUnwrap(
-            Device(platform: "iOS", deviceClass: "PHONE", country: "fr", store: "apple").cleaned()
-        )
-
-        XCTAssertEqual(clean.platform, "ios")
+        let clean = try XCTUnwrap(Device(country: "fr").cleaned())
         XCTAssertEqual(clean.country, "FR")
-        XCTAssertEqual(clean.deviceClass, "phone")
 
         XCTAssertNil(Device(country: "KR").cleaned(excluding: ["KR"]))
         XCTAssertNil(Device(country: "kr").cleaned(excluding: ["KR"]))

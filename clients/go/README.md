@@ -5,11 +5,11 @@ A dependency-free Go client for the collector (`POST {endpoint}/{source}`), writ
 ## TL;DR
 
 ```go
-client, _ := analytics.New(analytics.Options{Endpoint: "https://analytics.example.com", Source: "<sourceName>"})
+client, _ := analytics.New(analytics.Options{IngestionUrl: "https://analytics.example.com/<sourceName>"})
 defer client.Close(ctx)
 
 session := client.
-	For(installID, analytics.Device{Platform: "android", Country: "FR"}).
+	For(installID, analytics.Device{Country: "FR"}).
 	WithContext(map[string]any{"plan": "free"}) // what the app reported about the installation
 session.Track("game_end", map[string]any{"result": "win", "moves": 34})
 ```
@@ -44,11 +44,33 @@ and the module forwards them. The server has no device context of its own — do
 | `Close(ctx) error` | One last flush, then stops the sender. Idempotent. |
 | `Stats() Stats` | Accepted / Rejected / Dropped / Sent / Requests counters. |
 
-`Options`: `Endpoint`, `Source` (required), `HTTPClient` (10s timeout), `QueueSize` (4096),
-`BatchSize` (100, the collector's ceiling), `FlushInterval` (10s), `MaxAttempts` (3), `Logger`, `Now`.
+`Options` mirrors the .NET client, which is this repository's reference: `IngestionUrl`
+(`https://baseUrl/sourceName`, required), `Token`, `Enabled`, `ExcludedCountries`, `Context` — and
+the rest under `Advanced`:
 
-`Device` carries what the app reported about the device — `Build`, `Platform`, `OsVersion`,
-`DeviceClass`, `Locale`, `Country`, `Store`. It stays comparable, so it can key the batching.
+```go
+client, _ := analytics.New(analytics.Options{
+	IngestionUrl: "https://analytics.example.com/myapp",
+	Token:        os.Getenv("ANALYTICS_TOKEN"),
+	Advanced:     analytics.AdvancedOptions{QueueCapacity: 4000, Logger: myLogger},
+})
+```
+
+`Advanced`: `FlushInterval` (30s), `MaxEventsPerWindow` (**0 here**, disabled — one server process
+speaks for every visitor, so a per-process ceiling would throttle a whole site; the mobile clients
+default to 30), `RateWindow` (60s), `BatchSize` (100, the collector's ceiling), `QueueCapacity`
+(4000), `MaxAttempts` (3), `HTTPClient` (10s timeout — its `Timeout` is this client's
+`RequestTimeout`), `Logger`, `OnError` (`(err, reason, permanent)`, called on every loss next to the
+log), `Now`.
+
+There is no `SpoolPath`, `SpoolCapacity`, `InstallIdLifetime`, `OptOutLifetime` or `SeedInstallId`
+here: a server has no installation of its own, and no process death worth spooling across. The names
+that *are* here are the ones the other clients use.
+
+`Device` is `Country` alone — the region setting the app reported, never derived from the client
+address. The platform, the build, the OS version, the device class and the store come from the
+`Authorization` token; see the [contract](../README.md#payload). It stays comparable, so it can key
+the batching.
 
 What is true of the *installation* — a plan, a finished tutorial, an install-age bucket — is the batch
 context: `Session.WithContext(map[string]any{...})`, or `Client.TrackContext(...)`. Its keys are

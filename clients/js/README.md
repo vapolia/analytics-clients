@@ -10,8 +10,7 @@ import Analytics from '@vapolia/analytics';
 // once, as early as possible — awaiting is optional
 // context: what is true of the installation, read again for every event
 void Analytics.start({
-  source: '<sourceName>',
-  endpoint: 'https://analytics.example.com',
+  ingestionUrl: 'https://analytics.example.com/<sourceName>',
   context: () => ({ plan: user.plan }),
 });
 
@@ -59,14 +58,18 @@ npx expo install expo-localization expo-device expo-application
 
 | Package | What it fills in | Without it |
 |---|---|---|
-| `expo-localization` | `locale`, `country` (the region setting) | Both absent — the collector stores unknown |
-| `expo-device` | `deviceClass` (phone / tablet / desktop) | Absent |
-| `expo-application` | `build` (the store build number) | Absent |
+| `expo-localization` | `country` (the region setting) | Absent — the collector stores unknown |
 
-An app that passes its own context needs none of them:
+It is the only one left: the platform, the build, the OS version and the device class used to be read
+from `expo-device` and `expo-application`, and they now come from the `Authorization` token instead —
+see the [contract](../README.md#payload). An app that passes its own region needs no Expo package at
+all:
 
 ```ts
-void Analytics.start({ source: '<sourceName>', device: { locale: 'fr-FR', country: 'FR', build: '1042' } });
+void Analytics.start({
+  ingestionUrl: 'https://analytics.example.com/<sourceName>',
+  advanced: { device: { country: 'FR' } },
+});
 ```
 
 Works in Expo Go, EAS Build and bare React Native — it is plain JS, so a fix ships through EAS Update
@@ -79,7 +82,7 @@ without a store release.
 | Installation id | A random v4 UUID in AsyncStorage, renewed after 390 days — the 13-month ceiling, with a margin for clock drift. **Not** in SecureStore/keychain: those survive the app being deleted, which would make the id outlive the installation it names. |
 | `isFirstRun()` | Whether the installation has been seen before, so *your* `first_open` fires once — kept apart from the id, so a renewal is not a new install. |
 | `lifecycle.onForeground` / `onBackground` | The `AppState` transitions the client already listens to in order to flush and spool. |
-| Device context | `platform` (`ios` / `maccatalyst` / `android`), `osVersion`, `store` (`apple` on iOS), plus whatever the optional packages provide. |
+| Device context | `country`, and only `country`: the **region setting**, never a geolocation. The platform, the build, the OS version, the device class and the store come from the `Authorization` token — see the [contract](../README.md#payload). |
 | Time zone | Each event carries the device offset in minutes east of UTC (`tz`), read at the instant of the event, apart from its UTC `ts`. |
 | Spool | The queue is written to storage ~500 ms after each event, and read back once on the next launch. |
 
@@ -95,13 +98,24 @@ without a store release.
 | `getStats()` | `accepted` / `rejected` / `dropped` / `sent` / `requests`. |
 | `context` (option) | What is true of the installation for a whole batch, read again for every event. Every key must be on the source's `context` whitelist. |
 | `isFirstRun()`, `markSeen()`, `lifecycle` | What an app needs to name its own opens. |
+| `firstSeen()`, `installAgeBucket(firstSeen, now?)` | The installation's age, in buckets, for a whitelisted `context` key. |
 | `updateDevice` | Corrects what the device probe reported. Not for anything about the app. |
 | `stop()` | One last flush, then the sender stops. Rarely needed. |
 | `registerBackgroundFlush()` | Opt-in, see below. |
 
-`AnalyticsOptions`: `source` and `endpoint` (both required), `token`, `excludedCountries`, `flushIntervalMs` (30 000), `batchSize` (100,
-the collector's ceiling), `queueCapacity` (2000), `spoolCapacity` (1000), `spoolDebounceMs` (500),
-`maxAttempts` (3), `requestTimeoutMs` (10 000), `context`, `device`, `logger`.
+`AnalyticsOptions` mirrors the .NET client, which is this repository's reference: `ingestionUrl`
+(required), `token`, `seedInstallId`, `enabled`, `excludedCountries`, `context` — and the rest under
+`advanced` and `app`.
+
+`advanced`: `flushIntervalMs` (30 000), `maxEventsPerWindow` (30), `rateWindowMs` (60 000),
+`batchSize` (100, the collector's ceiling), `queueCapacity` (4000), `maxAttempts` (3),
+`requestTimeoutMs` (10 000), `spoolCapacity` (1000, zero disables the spool), `spoolDebounceMs`
+(500), `installIdLifetimeMs` and `optOutLifetimeMs` (390 days each), `device`, `logger`, `onError`
+(`(error, reason, permanent)`, called on every loss next to the log).
+`app`: `autoFlushOnBackground` (true).
+
+`spoolDebounceMs` is this client's own: it stands in for the `beginBackgroundTask` a JS runtime does
+not have.
 
 ## Failure behaviour
 

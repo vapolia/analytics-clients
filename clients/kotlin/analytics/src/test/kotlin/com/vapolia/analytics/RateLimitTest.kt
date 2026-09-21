@@ -19,12 +19,13 @@ class RateLimitTest {
     }
 
     private fun client(maxEventsPerWindow: Int): AnalyticsClient = AnalyticsClient(
-        config = AnalyticsConfig(
-            source = "testsource",
-            endpoint = "unused, the transport is built here",
-            flushIntervalMs = 3_600_000,
-            maxEventsPerWindow = maxEventsPerWindow,
-            rateWindowMs = 60_000,
+        options = AnalyticsOptions(
+            ingestionUrl = "unused, the transport is built here/testsource",
+            advanced = AnalyticsAdvancedOptions(
+                flushIntervalMs = 3_600_000,
+                maxEventsPerWindow = maxEventsPerWindow,
+                rateWindowMs = 60_000,
+            ),
         ),
         transport = Transport("http://127.0.0.1:1/testsource", connectTimeoutMs = 200, readTimeoutMs = 200),
         spool = null,
@@ -32,7 +33,7 @@ class RateLimitTest {
     ).also { clients.add(it) }
 
     private val installId = "11111111-0000-0000-0000-000011111111"
-    private val device = Device(platform = "android")
+    private val device = Device(country = "FR")
 
     @Test
     fun `drops everything past the ceiling until the window ends`() {

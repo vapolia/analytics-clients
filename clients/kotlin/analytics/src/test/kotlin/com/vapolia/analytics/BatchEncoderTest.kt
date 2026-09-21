@@ -12,7 +12,7 @@ class BatchEncoderTest {
 
     @Test
     fun `encodes the batch shape the collector expects`() {
-        val key = BatchKey(installId, Device(platform = "android", country = "FR"), """{"plan":"free"}""")
+        val key = BatchKey(installId, Device(country = "FR"), """{"plan":"free"}""")
         val json = encoder.encode(
             key,
             listOf(
@@ -22,7 +22,6 @@ class BatchEncoderTest {
         )
 
         assertTrue(json.startsWith("{\"installId\":\"$installId\""))
-        assertTrue(json.contains("\"platform\":\"android\""))
         assertTrue(json.contains("\"country\":\"FR\""))
         assertTrue(json.contains("\"context\":{\"plan\":\"free\"}"))
         assertTrue(json.contains("\"name\":\"game_end\""))
@@ -65,5 +64,28 @@ class BatchEncoderTest {
         val json = encoder.encode(BatchKey(installId, Device()), listOf(Event("app_open", 0, emptyMap())))
 
         assertEquals(1, json.split("installId").size - 1)
+    }
+
+    /**
+     * The contract's closed list. This is the test that keeps the four clients from drifting apart
+     * again: the platform, the build, the OS version, the device class, the store and the locale
+     * come from the `Authorization` token, never the body.
+     */
+    @Test
+    fun `the body carries the contract's fields and nothing else`() {
+        // An empty context and no props, so every key in the body is a top-level one.
+        val json = encoder.encode(
+            BatchKey(installId, Device(country = "FR"), "{}"),
+            listOf(Event("app_open", 0, emptyMap())),
+        )
+
+        val keys = Regex("[{,]\"([a-zA-Z]+)\":").findAll(json).map { it.groupValues[1] }.toList()
+        assertEquals(listOf("installId", "country", "events", "name", "ts"), keys)
+    }
+
+    @Test
+    fun `a country it does not know is not sent at all`() {
+        val json = encoder.encode(BatchKey(installId, Device(), "{}"), listOf(Event("app_open", 0, emptyMap())))
+        assertTrue(json, !json.contains("country"))
     }
 }

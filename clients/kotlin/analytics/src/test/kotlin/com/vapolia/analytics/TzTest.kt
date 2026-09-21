@@ -13,7 +13,7 @@ class TzTest {
     @Test
     fun encodesTheOffsetInMinutesPerEvent() {
         val json = BatchEncoder().encode(
-            BatchKey(installId, Device(platform = "android")),
+            BatchKey(installId, Device(country = "FR")),
             listOf(Event("app_open", 0L, emptyMap(), 120), Event("game_end", 1L, emptyMap(), -570)),
         )
 
@@ -33,8 +33,8 @@ class TzTest {
         val file = File.createTempFile("tz-spool", ".bin").apply { deleteOnExit() }
         val spool = Spool(file, 10)
         val items = listOf(
-            Pending(BatchKey(installId, Device(platform = "android")), Event("app_open", 1_757_500_000_000, emptyMap(), -570)),
-            Pending(BatchKey(installId, Device(platform = "android")), Event("game_end", 1_757_500_001_000, emptyMap())),
+            Pending(BatchKey(installId, Device(country = "FR")), Event("app_open", 1_757_500_000_000, emptyMap(), -570)),
+            Pending(BatchKey(installId, Device(country = "FR")), Event("game_end", 1_757_500_001_000, emptyMap())),
         )
 
         spool.save(items)

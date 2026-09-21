@@ -12,6 +12,9 @@ let package = Package(
     platforms: [
         .iOS(.v15),
         .macCatalyst(.v15),
+        // Not a shipping platform: it is what `swift build` and `swift test` compile for on a Mac.
+        // v12 is what `URLSession.data(for:)` needs in Transport.
+        .macOS(.v12),
     ],
     products: [
         .library(name: "VapoliaAnalytics", targets: ["VapoliaAnalytics"]),

@@ -14,16 +14,12 @@ import (
 )
 
 // The wire shape of POST /{source}. What describes the device sits on the batch, not on each event.
+// wireBatch is the wire shape of POST /{source}: installId, country, context, events and nothing
+// else. The platform and the build come from the Authorization token alone, never the body.
 type wireBatch struct {
 	InstallID string `json:"installId"`
 
-	Build       string `json:"build,omitempty"`
-	Platform    string `json:"platform,omitempty"`
-	OsVersion   string `json:"osVersion,omitempty"`
-	DeviceClass string `json:"deviceClass,omitempty"`
-	Locale      string `json:"locale,omitempty"`
-	Country     string `json:"country,omitempty"`
-	Store       string `json:"store,omitempty"`
+	Country string `json:"country,omitempty"`
 
 	// Context is already cleaned and canonical JSON. Raw so the batch key can stay a string.
 	Context json.RawMessage `json:"context,omitempty"`
@@ -51,16 +47,10 @@ func (c *Client) send(key batchKey, events []wireEvent) {
 	}
 
 	body, err := json.Marshal(wireBatch{
-		InstallID:   key.installID,
-		Build:       key.device.Build,
-		Platform:    key.device.Platform,
-		OsVersion:   key.device.OsVersion,
-		DeviceClass: key.device.DeviceClass,
-		Locale:      key.device.Locale,
-		Country:     key.device.Country,
-		Store:       key.device.Store,
-		Context:     rawContext(key.context),
-		Events:      events,
+		InstallID: key.installID,
+		Country:   key.device.Country,
+		Context:   rawContext(key.context),
+		Events:    events,
 	})
 	if err != nil {
 		c.dropped.Add(uint64(len(events)))
@@ -76,7 +66,7 @@ func (c *Client) send(key batchKey, events []wireEvent) {
 		}
 
 		var perm permanentError
-		if errors.As(err, &perm) || attempt >= c.opts.MaxAttempts {
+		if errors.As(err, &perm) || attempt >= c.adv.MaxAttempts {
 			c.dropped.Add(uint64(len(events)))
 			c.errorf(err, "dropping %d events after %d attempt(s)", len(events), attempt)
 			return
@@ -100,7 +90,7 @@ func (c *Client) post(body []byte) (time.Duration, error) {
 	c.requests.Add(1)
 
 	ctx := context.Background()
-	if timeout := c.opts.HTTPClient.Timeout; timeout > 0 {
+	if timeout := c.adv.HTTPClient.Timeout; timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
@@ -116,7 +106,7 @@ func (c *Client) post(body []byte) (time.Duration, error) {
 		req.Header.Set("Authorization", "Bearer "+c.opts.Token)
 	}
 
-	resp, err := c.opts.HTTPClient.Do(req)
+	resp, err := c.adv.HTTPClient.Do(req)
 	if err != nil {
 		return 0, err
 	}
@@ -135,7 +125,7 @@ func (c *Client) post(body []byte) (time.Duration, error) {
 
 	// 404 means this source is not configured there, 400 that the payload is not what it accepts.
 	case resp.StatusCode == http.StatusNotFound:
-		return 0, permanentError{fmt.Errorf("unknown source %q (404)", c.opts.Source)}
+		return 0, permanentError{fmt.Errorf("unknown source %q (404)", c.source)}
 	case resp.StatusCode >= 400 && resp.StatusCode < 500:
 		return 0, permanentError{fmt.Errorf("refused with %d", resp.StatusCode)}
 
@@ -146,7 +136,7 @@ func (c *Client) post(body []byte) (time.Duration, error) {
 
 // fresh drops what the collector would refuse on arrival.
 func (c *Client) fresh(events []wireEvent) []wireEvent {
-	cutoff := c.opts.Now().UTC().Add(-MaxEventAge)
+	cutoff := c.adv.Now().UTC().Add(-MaxEventAge)
 	kept := events[:0]
 	for _, e := range events {
 		if e.Ts.After(cutoff) {

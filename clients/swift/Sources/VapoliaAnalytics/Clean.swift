@@ -1,26 +1,23 @@
 import Foundation
 
 // Limits mirrored from the collector's EventSanitizer, which applies them again on arrival.
-// Public: maxEventsPerBatch is used as a default argument value in AnalyticsConfig's public init.
+// Public: maxEventsPerBatch is used as a default argument value in AnalyticsAdvancedOptions' init.
 public enum Limits {
     public static let maxEventsPerBatch = 100
     static let maxPropsPerEvent = 12
     /// Batch-context keys kept, mirroring the collector's own ceiling.
     static let maxContextKeys = 12
     static let maxValueLength = 64
-    static let maxBuildLength = 24
-    static let maxOsVersionLength = 24
-    static let maxLocaleLength = 12
 
     /// How far back the collector accepts a timestamp. Older events are dropped instead of sent.
     static let maxEventAge: TimeInterval = 7 * 24 * 60 * 60
+
+    /// Batch-context groups buffered at once. Each one is its own request, so a context that changes
+    /// on every event would cost one request per event; past this the sender flushes and warns.
+    static let maxBufferedGroups = 32
 }
 
 enum Clean {
-    static let platforms: Set<String> = ["android", "ios", "maccatalyst", "windows", "web"]
-    static let deviceClasses: Set<String> = ["phone", "tablet", "desktop", "other"]
-    static let stores: Set<String> = ["google", "apple", "other"]
-
     /// Trims, caps the length, strips control characters, and turns blank into nil. The control pass
     /// is not cosmetic: Postgres rejects U+0000 in `text` and `jsonb`.
     static func text(_ value: String?, maxLength: Int) -> String? {
@@ -43,14 +40,6 @@ enum Clean {
         else { return nil }
 
         return trimmed.uppercased()
-    }
-
-    static func pick(_ value: String?, from allowed: Set<String>) -> String? {
-        guard let normalized = value?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
-              allowed.contains(normalized)
-        else { return nil }
-
-        return normalized
     }
 
     /// The canonical UUID form only, and never the nil UUID.

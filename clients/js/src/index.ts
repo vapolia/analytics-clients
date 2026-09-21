@@ -11,15 +11,19 @@ import { setBackgroundFlusher } from './native/background';
 import type { AnalyticsOptions, AnalyticsStats, Context, Device, Props } from './core/types';
 
 export type {
+  AnalyticsAdvancedOptions,
+  AnalyticsAppOptions,
   AnalyticsLogger,
   AnalyticsOptions,
   AnalyticsStats,
   AnalyticsStorage,
   Context,
   Device,
+  InstallSeed,
   Props,
   PropValue,
 } from './core/types';
+export { installAgeBucket } from './core/install';
 export { registerBackgroundFlush } from './native/background';
 
 interface Running {
@@ -27,6 +31,7 @@ interface Running {
   identity: Identity;
   subscription: NativeEventSubscription | undefined;
   context: () => Context | undefined;
+  autoFlushOnBackground: boolean;
 }
 
 let running: Running | undefined;
@@ -39,7 +44,7 @@ let warned = false;
  * before storage answers are queued, not lost.
  *
  * ```ts
- * void Analytics.start({ source: 'myapp' });
+ * void Analytics.start({ ingestionUrl: 'https://analytics.example.com/myapp' });
  * Analytics.track('game_end', { result: 'win', moves: 34 });
  * ```
  */
@@ -47,21 +52,34 @@ export async function start(options: AnalyticsOptions): Promise<void> {
   if (running) return;
   if (starting) return starting;
 
+  const resolved = resolveOptions(options);
+  if (!resolved.enabled) return;
+
   starting = (async () => {
-    const resolved = resolveOptions(options);
-    const identity = new Identity(asyncStorage);
+    const identity = new Identity(
+      asyncStorage,
+      () => Date.now(),
+      resolved.installIdLifetimeMs,
+      resolved.optOutLifetimeMs,
+      resolved.seedInstallId
+    );
     const queue = new Queue(
       resolved,
-      new FetchPoster(
-        `${resolved.endpoint.replace(/\/+$/, '')}/${resolved.source}`,
-        resolved.requestTimeoutMs,
-        resolved.token || undefined
-      ),
-      new Spool(asyncStorage, resolved.source, resolved.spoolCapacity),
+      new FetchPoster(resolved.ingestionUrl, resolved.requestTimeoutMs, resolved.token || undefined),
+      // Zero capacity is how an app turns the spool off, as in the .NET client.
+      resolved.spoolCapacity > 0
+        ? new Spool(asyncStorage, resolved.source, resolved.spoolCapacity)
+        : undefined,
       () => identity.current()
     );
 
-    running = { queue, identity, subscription: undefined, context: resolved.context };
+    running = {
+      queue,
+      identity,
+      subscription: undefined,
+      context: resolved.context,
+      autoFlushOnBackground: resolved.autoFlushOnBackground,
+    };
     setBackgroundFlusher(() => queue.flush());
 
     // The detected context first, so anything the caller passed wins over it.
@@ -157,6 +175,14 @@ export async function markSeen(): Promise<void> {
 }
 
 /**
+ * When this installation was first seen, in milliseconds since the epoch, kept across id renewals.
+ * Feed it to `installAgeBucket` if your source whitelists a bucket for it.
+ */
+export function firstSeen(): number | undefined {
+  return running?.identity.firstSeen();
+}
+
+/**
  * The app returning to the foreground, and leaving it. It hangs off the AppState listener the client
  * already holds, rather than a second one.
  */
@@ -177,6 +203,7 @@ function onAppStateChange(state: AppStateStatus): void {
   if (state === 'background') {
     wasActive = false;
     lifecycle.onBackground?.();
+    if (!current.autoFlushOnBackground) return;
     // Best effort: the JS engine is suspended shortly after this. The spool, written a few hundred
     // milliseconds after every event, is what actually survives.
     void current.queue.persist();
@@ -197,6 +224,7 @@ export const Analytics = {
   updateDevice,
   isFirstRun,
   markSeen,
+  firstSeen,
   lifecycle,
 };
 

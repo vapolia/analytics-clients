@@ -1,38 +1,17 @@
 import Foundation
 
-/// Facts about the device, which the collector stores per event but which only change between
-/// launches. Every field is optional, and `Analytics` fills most of them in. What is true of the
-/// installation rather than of the device belongs in the batch context instead.
+/// What the body still says about the device: its region, and nothing else.
+///
+/// The platform, the build, the OS version, the device class and the store come from the
+/// `Authorization` token, which names the build that was issued it — so a build cannot be invented,
+/// and no client sends them. `country` stays here because it is the axis of the source's
+/// `excludedCountries` filter. Same shape as the .NET client's `Device` record.
 public struct Device: Hashable, Codable, Sendable {
-    /// Store build number, not the display version.
-    public var build: String?
-    /// android | ios | maccatalyst | windows | web
-    public var platform: String?
-    public var osVersion: String?
-    /// phone | tablet | desktop | other
-    public var deviceClass: String?
-    public var locale: String?
-    /// ISO 3166-1 alpha-2, from the device locale.
+    /// ISO 3166-1 alpha-2, from the device's **region setting** — never a geolocation of the IP.
     public var country: String?
-    /// google | apple | other
-    public var store: String?
 
-    public init(
-        build: String? = nil,
-        platform: String? = nil,
-        osVersion: String? = nil,
-        deviceClass: String? = nil,
-        locale: String? = nil,
-        country: String? = nil,
-        store: String? = nil
-    ) {
-        self.build = build
-        self.platform = platform
-        self.osVersion = osVersion
-        self.deviceClass = deviceClass
-        self.locale = locale
+    public init(country: String? = nil) {
         self.country = country
-        self.store = store
     }
 
     /// The device reduced to what the collector will store, or nil when the whole batch is refused.
@@ -40,14 +19,6 @@ public struct Device: Hashable, Codable, Sendable {
         let country = Clean.country(country)
         if let country, excludedCountries.contains(country) { return nil }
 
-        return Device(
-            build: Clean.text(build, maxLength: Limits.maxBuildLength),
-            platform: Clean.pick(platform, from: Clean.platforms),
-            osVersion: Clean.text(osVersion, maxLength: Limits.maxOsVersionLength),
-            deviceClass: Clean.pick(deviceClass, from: Clean.deviceClasses),
-            locale: Clean.text(locale, maxLength: Limits.maxLocaleLength),
-            country: country,
-            store: Clean.pick(store, from: Clean.stores)
-        )
+        return Device(country: country)
     }
 }

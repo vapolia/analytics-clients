@@ -46,6 +46,11 @@ export class Queue {
   private stopped = false;
   private windowStart = 0;
   private windowCount = 0;
+  /**
+   * Bumped by `clear`. A run that started before the bump must not put its events back, nor write
+   * them to storage: that is what makes opting out drop what was already in flight.
+   */
+  private epoch = 0;
 
   constructor(
     private readonly options: ResolvedOptions,
@@ -78,6 +83,7 @@ export class Queue {
 
     if (!this.withinRate()) {
       this.stats.dropped += 1;
+      this.report(undefined, `dropping "${name}": the rate window is saturated`, false);
       return;
     }
 
@@ -85,12 +91,14 @@ export class Queue {
     const cleanedDevice = cleanDevice(device, this.options.excludedCountries);
     if (eventName === undefined || cleanedDevice === undefined) {
       this.stats.rejected += 1;
+      this.report(undefined, `refusing "${name}": unusable name or excluded country`, true);
       return;
     }
 
     if (this.held >= this.options.queueCapacity) {
       // Full queue: the collector is unreachable, or slower than we emit.
       this.stats.dropped += 1;
+      this.report(undefined, `dropping "${name}": the queue is full`, false);
       return;
     }
 
@@ -155,6 +163,7 @@ export class Queue {
     this.clearSpoolTimer();
     this.buffers.clear();
     this.held = 0;
+    this.epoch += 1;
     await this.spool?.clear();
   }
 
@@ -197,16 +206,19 @@ export class Queue {
   private async run(): Promise<void> {
     const groups = [...this.buffers.values()];
     this.buffers.clear();
+    const epoch = this.epoch;
 
     for (const group of groups) {
       for (let index = 0; index < group.events.length; index += this.options.batchSize) {
         const chunk = group.events.slice(index, index + this.options.batchSize);
         const kept = await this.send(group.device, group.context, group.installId, chunk);
-        this.keep(group.device, group.context, group.installId, kept);
+        this.keep(group.device, group.context, group.installId, kept, epoch);
       }
     }
 
-    this.scheduleSpool();
+    // An opt-out that landed mid-run has already emptied the buffers and the spool; writing them
+    // back here would undo it.
+    if (epoch === this.epoch) this.scheduleSpool();
   }
 
   /** Sends one group and accounts for it. Returns the events to try again later, if any. */
@@ -220,7 +232,9 @@ export class Queue {
     const fresh = events.filter((event) => event.ts > cutoff);
     if (fresh.length < events.length) {
       // The collector refuses them on arrival, so this only saves the request.
-      this.drop(events.length - fresh.length);
+      const stale = events.length - fresh.length;
+      this.drop(stale);
+      this.report(undefined, `dropping ${stale} events older than the collector accepts`, true);
     }
     if (fresh.length === 0) return [];
 
@@ -245,8 +259,8 @@ export class Queue {
       }
 
       if (result.kind === 'permanent') {
-        this.options.logger?.error(`analytics: dropping ${fresh.length} events: ${result.reason}`);
         this.drop(fresh.length);
+        this.report(undefined, `dropping ${fresh.length} events: ${result.reason}`, true);
         return [];
       }
 
@@ -267,19 +281,39 @@ export class Queue {
     device: Device,
     context: Record<string, PropValue> | undefined,
     installId: string | undefined,
-    events: AnalyticsEvent[]
+    events: AnalyticsEvent[],
+    epoch: number
   ): void {
     if (events.length === 0) return;
 
+    if (epoch !== this.epoch) {
+      // Opted out while this batch was in flight: it is not ours to keep any more.
+      return;
+    }
+
     const room = this.options.queueCapacity - this.bufferedCount();
     const kept = events.length > room ? events.slice(0, Math.max(0, room)) : events;
-    if (kept.length < events.length) this.drop(events.length - kept.length);
+    if (kept.length < events.length) {
+      const lost = events.length - kept.length;
+      this.drop(lost);
+      this.report(undefined, `dropping ${lost} events: the queue is full`, false);
+    }
     if (kept.length === 0) return;
 
     const key = batchKey(device, context);
     const group = this.buffers.get(key);
     if (group) group.events.push(...kept);
     else this.buffers.set(key, { device, context, installId, events: kept });
+  }
+
+  /**
+   * Every loss reaches the log and, when the app asked for one, `onError` — the hook a client uses
+   * to tell its user that measurement is degraded.
+   */
+  private report(error: unknown, reason: string, permanent: boolean): void {
+    if (permanent) this.options.logger?.error(`analytics: ${reason}`);
+    else this.options.logger?.warn(`analytics: ${reason}`);
+    this.options.onError?.(error, reason, permanent);
   }
 
   private drop(count: number): void {
@@ -297,7 +331,12 @@ export class Queue {
     const items: Pending[] = [];
     for (const group of this.buffers.values()) {
       for (const event of group.events) {
-        items.push({ device: group.device, event, installId: group.installId });
+        items.push({
+          device: group.device,
+          context: group.context,
+          event,
+          installId: group.installId,
+        });
       }
     }
     return items;

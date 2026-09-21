@@ -29,7 +29,7 @@ export class Spool {
     const kept = items.length > this.capacity ? items.slice(0, this.capacity) : items;
 
     try {
-      await this.storage.setItem(this.key, JSON.stringify({ version: 1, items: kept }));
+      await this.storage.setItem(this.key, JSON.stringify({ version: 2, items: kept }));
     } catch {
       // Nothing to do about it, and nothing a caller could do either.
     }
@@ -48,7 +48,7 @@ export class Spool {
 
     try {
       const parsed = JSON.parse(raw) as { version?: number; items?: Pending[] };
-      if (parsed.version !== 1 || !Array.isArray(parsed.items)) return [];
+      if (parsed.version !== 2 || !Array.isArray(parsed.items)) return [];
 
       const items = parsed.items.filter(
         (item): item is Pending =>
