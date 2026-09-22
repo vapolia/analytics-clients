@@ -3,10 +3,29 @@
 For whoever wires a Vapolia analytics client into an app or a website.  
 The clients carry a lot of the regime, but four things cannot be carried by a library, and they are yours.
 
-The clients are built to the criteria that exempt audience measurement from consent: first-party, own
-use, aggregated statistics, no cross-app or cross-site tracking, nothing shared, an identifier renewed
-at 13 months. Where a country asks for more, the section below says so. The collector operator holds the legal dossier, and this
-page is the developer-facing summary of what it expects from you.
+The clients are built to the criteria that exempt audience measurement from consent, listed below.
+Where a country asks for more, *The welcome popup* says which one and what to show. The collector
+operator holds the legal dossier, and this page is the developer-facing summary of what it expects
+from you.
+
+## Summary
+
+1. **Inform.** The exemption waives consent, **not information** (art. 82 LIL). Say in your privacy
+   policy that you measure audience, with what identifier, for how long.
+2. **Offer a refusal.** Collection is on by default, which the exemption allows — but only if the
+   person can turn it off. Every client has an opt-out. Wire it to a visible switch.
+3. **Renew the identifier, at most every 13 months, with no extension.** The clients do it. Do not
+   defeat it by supplying your own id.
+4. **Declare accurately in the stores**, in the same release as the code.
+
+## Why there is no consent banner
+
+Writing an identifier onto someone's device normally requires consent. Audience measurement is
+exempt, provided it stays audience measurement: own use, no cross-site or cross-app tracking, no
+personalisation, no A/B testing, no ad or attribution tool, no raw data shared or sold. The moment
+one of those appears, the exemption is gone and a real consent banner — for everyone — is required.
+
+Knowing a user is an adult does not restore it: the exemption hangs on the purpose, not the age.
 
 ## The welcome popup
 
@@ -84,25 +103,6 @@ The popup of regime 1 is enough. What these require is notice at collection and 
 China and Russia raise data-localisation and export questions that this page does not cover. Ask the
 collector operator before shipping there.
 
-## Summary
-
-1. **Inform.** The exemption waives consent, **not information** (art. 82 LIL). Say in your privacy
-   policy that you measure audience, with what identifier, for how long.
-2. **Offer a refusal.** Collection is on by default, which the exemption allows — but only if the
-   person can turn it off. Every client has an opt-out; wire it to a visible switch.
-3. **Renew the identifier, at most every 13 months, with no extension.** The clients do it; do not
-   defeat it by supplying your own id.
-4. **Declare accurately in the stores**, in the same release as the code.
-
-## Why there is no consent banner
-
-Writing an identifier onto someone's device normally requires consent. Audience measurement is
-exempt, provided it stays audience measurement: own use, no cross-site or cross-app tracking, no
-personalisation, no A/B testing, no ad or attribution tool, no raw data shared or sold. The moment
-one of those appears, the exemption is gone and a real consent banner — for everyone — is required.
-
-Knowing a user is an adult does not restore it: the exemption hangs on the purpose, not the age.
-
 ## Information: the part most often missed
 
 Exempt from consent is not exempt from information. Your privacy policy has to name what you store on
@@ -166,7 +166,7 @@ it rather than on a client address shared by all its users. It raises a ceiling 
 else — what may be written is the source whitelist's business, key or no key. A key that does not
 check out is refused with a 401 rather than demoted, so an expired one is visible immediately.
 
-Never ship one inside a mobile app: a key in a binary is extractable and whoever extracts it spends everyone's quota. 
+Never ship one inside a mobile app: a key in a binary is extractable and whoever extracts it spends everyone's quota.
 
 ## Before you ship
 
