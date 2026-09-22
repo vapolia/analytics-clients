@@ -76,7 +76,7 @@ The queue is sent and written down when the app goes to the background, on its o
 | `track(name, vararg props: Pair<String, Any?>)` | `Analytics.track("theme_apply", "night" to true)`. |
 | `track(name, props: Map<String, Any?>?)` | Same, for a map built elsewhere. |
 | `flush()` / `flushBlocking(timeoutMs)` | Send what is queued, without / with waiting. |
-| `optedOut` | The right of opposition. Off by default; setting it drops the queue and forgets the id. |
+| `optedOut` | The right of opposition. Off by default, or `defaultOptedOut` while the person has not answered; setting it drops the queue and forgets the id. |
 | `installId` | The current id, for a support screen. Null when opted out. |
 | `stats` | `accepted` / `rejected` / `dropped` / `sent` / `requests`. |
 | `context = { map }` | What is true of the installation for a whole batch, read again for every event. Every key must be on the source's `context` whitelist. |
@@ -87,8 +87,8 @@ The queue is sent and written down when the app goes to the background, on its o
 | `stop(timeoutMs)` | One last flush, then the sender stops. Rarely needed. |
 
 `AnalyticsOptions` mirrors the .NET client, which is this repository's reference: `ingestionUrl`
-(required), `token`, `seedInstallId`, `enabled`, `excludedCountries`, `context` — and the rest under
-`advanced` and `app`:
+(required), `token`, `seedInstallId`, `enabled`, `defaultOptedOut`, `excludedCountries`, `context` —
+and the rest under `advanced` and `app`:
 
 ```kotlin
 Analytics.start(this, AnalyticsOptions(
@@ -106,6 +106,25 @@ Analytics.start(this, AnalyticsOptions(
 and `optOutLifetimeMs` (390 days each), `logger` (silent; pass `LogcatLogger` while integrating),
 `onError` (`(Throwable?, String, Boolean)`, called on every loss next to the log).
 `app`: `autoFlushOnBackground` (true).
+
+## A country that asks first
+
+Where consent must be given before anything is stored, start with `defaultOptedOut = true` and let the
+welcome popup answer. Nothing is sent and no installation id is written until it does; an acceptance
+takes effect at once, with no restart, and outranks the default on the next launch.
+
+```kotlin
+Analytics.start(this, AnalyticsOptions(
+    ingestionUrl = "https://analytics.example.com/myapp",
+    defaultOptedOut = requiresConsent(Locale.getDefault().country),   // your own lookup
+))
+
+onAccept = { Analytics.optedOut = false }
+onRefuse = { Analytics.optedOut = true }
+```
+
+Which countries ask first, and what the popup says, are in
+[OBLIGATIONS.md](https://github.com/vapolia/analytics-clients/blob/main/clients/OBLIGATIONS.md).
 
 ## Failure behaviour
 

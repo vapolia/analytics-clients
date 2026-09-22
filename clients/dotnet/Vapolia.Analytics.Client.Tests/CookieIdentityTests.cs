@@ -11,9 +11,12 @@ public class CookieIdentityTests
     static (CookieInstallIdentityProvider Provider, HttpContext Context) Create(
         string? cookie = null,
         string? acceptLanguage = null,
-        bool optedOut = false)
+        bool optedOut = false,
+        bool accepted = false,
+        Action<AnalyticsOptions>? configure = null)
     {
         var options = new AnalyticsOptions { IngestionUrl = new Uri("https://localhost/testsource") };
+        configure?.Invoke(options);
         var context = new DefaultHttpContext();
 
         var cookies = new List<string>();
@@ -21,6 +24,8 @@ public class CookieIdentityTests
             cookies.Add($"{options.WebOptions.CookieName}={cookie}");
         if (optedOut)
             cookies.Add($"{options.WebOptions.OptOutCookieName}=1");
+        if (accepted)
+            cookies.Add($"{options.WebOptions.OptOutCookieName}=0");
         if (cookies.Count > 0)
             context.Request.Headers.Cookie = string.Join("; ", cookies);
 
@@ -107,14 +112,51 @@ public class CookieIdentityTests
     }
 
     [TestMethod]
-    public void LiftingTheRefusalRemovesItsCookie()
+    public void LiftingTheRefusalRecordsTheAcceptance()
     {
         var (provider, context) = Create(optedOut: true);
 
         provider.OptedOut = false;
 
         var setCookie = context.Response.Headers.SetCookie.ToString();
-        Assert.IsTrue(setCookie.Contains("_vau_off=;", StringComparison.Ordinal), setCookie);
+        // "0", not a deletion: the acceptance has to outrank DefaultOptedOut on the next request.
+        Assert.IsTrue(setCookie.Contains("_vau_off=0", StringComparison.Ordinal), setCookie);
+    }
+
+    /// A country that asks first: no identity cookie until the banner accepts.
+    [TestMethod]
+    public void AnUnansweredConsentRegimeGetsNoIdAndNoCookie()
+    {
+        var (provider, context) = Create(configure: o => o.DefaultOptedOut = true);
+
+        Assert.IsTrue(provider.OptedOut);
+        Assert.IsNull(provider.GetInstallId());
+        Assert.AreEqual("", context.Response.Headers.SetCookie.ToString());
+    }
+
+    [TestMethod]
+    public void AnAcceptanceOutranksTheDefault()
+    {
+        var (provider, _) = Create(accepted: true, configure: o => o.DefaultOptedOut = true);
+
+        Assert.IsFalse(provider.OptedOut);
+        Assert.IsNotNull(Clean.InstallId(provider.GetInstallId()));
+    }
+
+    [TestMethod]
+    public void TheRegimeIsReadFromTheVisitorsCountry()
+    {
+        var consent = new HashSet<string> { "DE" };
+        void Regime(AnalyticsOptions o)
+            => o.WebOptions.DefaultOptedOutForCountry = country => country is not null && consent.Contains(country);
+
+        // One visitor at a time: HttpContextAccessor keeps the current context in an AsyncLocal, so
+        // two providers built side by side would both read the last one.
+        var (german, _) = Create(acceptLanguage: "de-DE", configure: Regime);
+        Assert.IsTrue(german.OptedOut);
+
+        var (french, _) = Create(acceptLanguage: "fr-FR", configure: Regime);
+        Assert.IsFalse(french.OptedOut);
     }
 
     [TestMethod]

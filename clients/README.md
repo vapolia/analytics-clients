@@ -37,11 +37,15 @@ Clients exist in the following language:
 7. **No client emits an event of its own.** `first_open` and `app_open` are named and placed by the
    app. Each client exposes what the app needs for it: a first-run flag, and the lifecycle it already
    watches in order to flush.
-8. **Excluded countries are refused client-side too.** The deployment lists them in `excludedCountries`, globally or
+8. **A client sends nothing while opted out, and mints no id.** The refusal is stored on the device.
+   Under a regime that asks before anything may be stored, `defaultOptedOut` is what an unanswered
+   question reads as: nothing is written until the answer, and an acceptance takes effect without a
+   restart. Which countries ask first is in [OBLIGATIONS.md](OBLIGATIONS.md).
+9. **Excluded countries are refused client-side too.** The deployment lists them in `excludedCountries`, globally or
    on the source when it needs a list of its own. The app passes whichever applies to its client, which then sends
    nothing from there. The collector enforces it as well. No client hardcodes a country. Which countries, and why, is
    in [OBLIGATIONS.md](OBLIGATIONS.md).
-9. **One token, one header, for both roles.** Every credential — a server's own key or a build's own token — is sent
+10. **One token, one header, for both roles.** Every credential — a server's own key or a build's own token — is sent
    as `Authorization: Bearer <token>`. The collector tells the two apart from the token's own claims, not from how it
    arrived. Either one names the platform and the build, so no client sends those in the body. A missing, expired or
    revoked build token gives a `401`: that build is no longer measured. A client presenting no credential is
@@ -92,7 +96,8 @@ The mobile and js clients write what is unsent to disk, so a restart resumes. Th
 hundred milliseconds after each event, rather than on background alone.
 
 Every client names these the same way:
-`ingestionUrl` (`https://baseUrl/sourceName`), `token`, `enabled`, `excludedCountries`, `context`,
+`ingestionUrl` (`https://baseUrl/sourceName`), `token`, `enabled`, `defaultOptedOut`,
+`excludedCountries`, `context`,
 `seedInstallId`, and — under `advanced` — `flushInterval` (30 s), `maxEventsPerWindow` (30),
 `rateWindow` (60 s), `batchSize` (100), `queueCapacity` (4000), `maxAttempts` (3), `requestTimeout`
 (10 s), `spoolPath`, `spoolCapacity` (1000), `installIdLifetime` and `optOutLifetime` (390 days

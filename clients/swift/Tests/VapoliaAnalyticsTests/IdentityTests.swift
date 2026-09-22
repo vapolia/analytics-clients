@@ -20,14 +20,41 @@ final class IdentityTests: XCTestCase {
     private func identity(
         now: @escaping @Sendable () -> Date,
         idLifetime: TimeInterval = InstallIdentity.defaultLifetime,
-        refusalLifetime: TimeInterval = InstallIdentity.defaultLifetime
+        refusalLifetime: TimeInterval = InstallIdentity.defaultLifetime,
+        defaultOptedOut: Bool = false
     ) -> InstallIdentity {
         InstallIdentity(
             defaults: defaults,
             now: now,
             idLifetime: idLifetime,
-            refusalLifetime: refusalLifetime
+            refusalLifetime: refusalLifetime,
+            defaultOptedOut: defaultOptedOut
         )
+    }
+
+    /// A country that asks first: nothing is collected, and nothing is written, until the popup is
+    /// answered.
+    func testAnUnansweredConsentRegimeOptsOutAndWritesNothing() {
+        let clock = Clock(Date(timeIntervalSince1970: 1_700_000_000))
+        let identity = identity(now: clock.read, defaultOptedOut: true)
+
+        XCTAssertTrue(identity.optedOut)
+        XCTAssertFalse(identity.answered)
+        XCTAssertNil(defaults.string(forKey: "vapolia.analytics.installId"))
+    }
+
+    /// An acceptance outranks the default, and survives the next launch.
+    func testAcceptanceOutranksTheDefault() {
+        let clock = Clock(Date(timeIntervalSince1970: 1_700_000_000))
+        let identity = identity(now: clock.read, defaultOptedOut: true)
+        identity.optedOut = false
+
+        XCTAssertFalse(identity.optedOut)
+        let id = identity.current()
+
+        let next = self.identity(now: clock.read, defaultOptedOut: true)
+        XCTAssertFalse(next.optedOut)
+        XCTAssertEqual(next.current(), id)
     }
 
     func testTheIdIsReissuedOnceItsLifetimeIsSpent() {

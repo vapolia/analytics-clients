@@ -16,13 +16,30 @@ public sealed class CookieInstallIdentityProvider(IHttpContextAccessor accessor,
 {
     readonly AnalyticsOptions options = options.Value;
 
-    /// <summary>Whether this visitor has opposed the measurement.</summary>
+    /// <summary>
+    /// Whether this visitor has opposed the measurement. Before any answer it reads
+    /// <see cref="AnalyticsOptions.DefaultOptedOut"/>, which is what a country requiring prior consent
+    /// sets: no identity cookie is written until the banner accepts.
+    /// </summary>
     public bool OptedOut
     {
         get
         {
             var context = accessor.HttpContext;
-            return context is not null && context.Request.Cookies[options.WebOptions.OptOutCookieName] == "1";
+            if (context is null)
+                return Unanswered();
+
+            return context.Request.Cookies[options.WebOptions.OptOutCookieName] switch
+            {
+                "1" => true,
+                "0" => false,
+                _ => Unanswered(),
+            };
+
+            bool Unanswered()
+                => options.WebOptions.DefaultOptedOutForCountry is { } byCountry
+                    ? byCountry(GetDevice().Country)
+                    : options.DefaultOptedOut;
         }
         set
         {
@@ -46,7 +63,15 @@ public sealed class CookieInstallIdentityProvider(IHttpContextAccessor accessor,
                 return;
             }
 
-            context.Response.Cookies.Delete(options.WebOptions.OptOutCookieName);
+            // "0", not a deletion: an acceptance has to outrank DefaultOptedOut on the next request.
+            context.Response.Cookies.Append(options.WebOptions.OptOutCookieName, "0", new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,
+                SameSite = SameSiteMode.Lax,
+                IsEssential = true,
+                Expires = DateTimeOffset.UtcNow.Add(options.AdvancedOptions.OptOutLifetime),
+            });
         }
     }
 

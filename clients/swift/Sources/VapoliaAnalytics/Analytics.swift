@@ -69,7 +69,8 @@ public final class Analytics: @unchecked Sendable {
 
         let identity = InstallIdentity(
             idLifetime: options.advanced.installIdLifetime,
-            refusalLifetime: options.advanced.optOutLifetime
+            refusalLifetime: options.advanced.optOutLifetime,
+            defaultOptedOut: options.defaultOptedOut
         )
         if let seed = options.seedInstallId?() {
             identity.seed(seed)
@@ -103,6 +104,11 @@ public final class Analytics: @unchecked Sendable {
         lock.unlock()
 
         Task { await sender.start() }
+        // What a previous session spooled must not leave while the person is opted out — or has not
+        // yet answered, under a regime that asks first.
+        if identity.optedOut {
+            Task { await sender.clear() }
+        }
         observeAppLifecycle(options.app)
     }
 

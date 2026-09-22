@@ -121,6 +121,13 @@ export interface AnalyticsOptions {
   enabled?: boolean;
 
   /**
+   * What `isOptedOut()` answers while the person has not answered. True is how a country that
+   * requires prior consent is expressed: nothing is sent and no installation id is written until the
+   * welcome popup calls `setOptedOut(false)`.
+   */
+  defaultOptedOut?: boolean;
+
+  /**
    * ISO 3166-1 alpha-2 countries excluded from the collection. Should be a copy of the exclusion
    * list of the collector (the analytics server).
    */
@@ -213,6 +220,7 @@ export interface ResolvedOptions {
   token: string;
   seedInstallId?: () => InstallSeed | undefined;
   enabled: boolean;
+  defaultOptedOut: boolean;
   excludedCountries: string[];
   context: () => Context | undefined;
   flushIntervalMs: number;
@@ -245,6 +253,7 @@ export function resolveOptions(options: AnalyticsOptions): ResolvedOptions {
     token: options.token ?? '',
     seedInstallId: options.seedInstallId,
     enabled: options.enabled ?? true,
+    defaultOptedOut: options.defaultOptedOut ?? false,
     excludedCountries: options.excludedCountries ?? [],
     context: options.context ?? (() => undefined),
     flushIntervalMs: advanced.flushIntervalMs ?? 30_000,

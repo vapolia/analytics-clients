@@ -99,4 +99,31 @@ describe('Identity', () => {
     expect(second.isOptedOut()).toBe(true);
     expect(second.current()).toBeUndefined();
   });
+
+  it('writes nothing while a consent regime has not been answered', async () => {
+    const storage = new MemoryStorage();
+    const identity = new Identity(storage, undefined, undefined, undefined, undefined, true);
+    await identity.load();
+
+    expect(identity.isOptedOut()).toBe(true);
+    expect(identity.current()).toBeUndefined();
+    // No identifier may be written on the device before the answer.
+    expect(storage.items.size).toBe(0);
+  });
+
+  it('collects once consent is given, and keeps collecting on the next launch', async () => {
+    const storage = new MemoryStorage();
+    const first = new Identity(storage, undefined, undefined, undefined, undefined, true);
+    await first.load();
+    await first.setOptedOut(false);
+
+    expect(first.isOptedOut()).toBe(false);
+    expect(installId(first.current())).toBeDefined();
+
+    // The stored acceptance outranks the default, so the popup's answer is not asked again.
+    const second = new Identity(storage, undefined, undefined, undefined, undefined, true);
+    await second.load();
+    expect(second.isOptedOut()).toBe(false);
+    expect(second.current()).toBe(first.current());
+  });
 });

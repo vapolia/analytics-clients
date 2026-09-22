@@ -93,7 +93,7 @@ without a store release.
 | `start(options)` | Starts the client. Idempotent. Returns a promise you may ignore. |
 | `track(name, props?)` | Props are scalars: string (≤64 chars), finite number, boolean. Max 12 per event. |
 | `flush()` | Sends what is queued. |
-| `setOptedOut(value)` / `isOptedOut()` | The right of opposition. Off by default; opting out drops the queue and forgets the id. |
+| `setOptedOut(value)` / `isOptedOut()` | The right of opposition. Off by default, or `defaultOptedOut` while the person has not answered; opting out drops the queue and forgets the id. |
 | `getInstallId()` | The current id, for a support screen. Undefined when opted out. |
 | `getStats()` | `accepted` / `rejected` / `dropped` / `sent` / `requests`. |
 | `context` (option) | What is true of the installation for a whole batch, read again for every event. Every key must be on the source's `context` whitelist. |
@@ -104,7 +104,7 @@ without a store release.
 | `registerBackgroundFlush()` | Opt-in, see below. |
 
 `AnalyticsOptions` mirrors the .NET client, which is this repository's reference: `ingestionUrl`
-(required), `token`, `seedInstallId`, `enabled`, `excludedCountries`, `context` — and the rest under
+(required), `token`, `seedInstallId`, `enabled`, `defaultOptedOut`, `excludedCountries`, `context` — and the rest under
 `advanced` and `app`.
 
 `advanced`: `flushIntervalMs` (30 000), `maxEventsPerWindow` (30), `rateWindowMs` (60 000),
@@ -116,6 +116,26 @@ without a store release.
 
 `spoolDebounceMs` is this client's own: it stands in for the `beginBackgroundTask` a JS runtime does
 not have.
+
+## A country that asks first
+
+Where consent must be given before anything is stored, start with `defaultOptedOut: true` and let the
+welcome popup answer. Nothing is sent and no installation id is written until it does; an acceptance
+takes effect at once, with no restart, and outranks the default on the next launch.
+
+```ts
+void Analytics.start({
+  ingestionUrl: 'https://analytics.example.com/myapp',
+  // your own lookup, from expo-localization's regionCode
+  defaultOptedOut: requiresConsent(getLocales()[0]?.regionCode),
+});
+
+const onAccept = () => Analytics.setOptedOut(false);
+const onRefuse = () => Analytics.setOptedOut(true);
+```
+
+Which countries ask first, and what the popup says, are in
+[OBLIGATIONS.md](https://github.com/vapolia/analytics-clients/blob/main/clients/OBLIGATIONS.md).
 
 ## Failure behaviour
 

@@ -73,10 +73,17 @@ public static class MobileAnalytics
             options.AdvancedOptions.SpoolPath ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "vapolia-analytics-spool.json");
 
             var identity = new MobileInstallIdentityProvider(options);
+            var spool = new PersistPendingItemsToLocalStorageHelper(options.AdvancedOptions.SpoolPath, options.AdvancedOptions.SpoolCapacity, logger);
+
+            // What a previous session spooled must not leave while the person is opted out — or has
+            // not yet answered, under a regime that asks first.
+            if (identity.OptedOut)
+                spool.Save([]);
+
             var started = new Sender(
                 options,
                 new HttpPublishHelper(httpClient, options.IngestionUrl, options.Token),
-                new (options.AdvancedOptions.SpoolPath, options.AdvancedOptions.SpoolCapacity, logger),
+                spool,
                 logger ?? NullLogger.Instance);
 
             sender = started;

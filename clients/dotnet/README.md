@@ -73,6 +73,30 @@ lifecycle.Foreground += () => analytics.Track("app_open");
 
 Turn the background flush off with `AutoFlushOnBackground = false`.
 
+## A country that asks first
+
+Where consent must be given before anything is stored, start with `DefaultOptedOut = true` and let the
+welcome popup answer. Nothing is sent and no installation id is written until it does; an acceptance
+takes effect at once, with no restart, and outranks the default on the next launch.
+
+```csharp
+builder.UseAnalytics(o =>
+{
+    o.IngestionUrl = new("https://analytics.example.com/myapp");
+    o.DefaultOptedOut = RequiresConsent(RegionInfo.CurrentRegion.TwoLetterISORegionName);   // your own lookup
+});
+
+// the popup's two buttons, on the injected IInstallContext
+onAccept = () => install.OptedOut = false;
+onRefuse = () => install.OptedOut = true;
+```
+
+`Enabled = false` is a different thing: a build switch that registers `NullAnalytics` for the life of
+the process, so it cannot serve as the consent gate.
+
+Which countries ask first, and what the popup says, are in
+[OBLIGATIONS.md](https://github.com/vapolia/analytics-clients/blob/main/clients/OBLIGATIONS.md).
+
 ## What this client cannot check for you
 
 - `ExcludedCountries` is empty by default: pass the list that applies to your app. What is in it is
@@ -171,7 +195,7 @@ Two consequences:
 |---|---|
 | **Install id** | A first-party cookie (`_vau`, HttpOnly, Secure, SameSite=Lax) that the server sets once. It expires after 13 months. |
 | **Country** | Automatically extracted from `Accept-Language`, never from IP geolocation. |
-| **Opposition** | A second cookie, `_vau_off`. When present the visitor is not measured. Refreshed on each visit. |
+| **Opposition** | A second cookie, `_vau_off`: `1` opposed, `0` accepted, absent unanswered. Refreshed on each visit. |
 
 Right of opposition: Inject `IInstallContext` and set OptedOut to true.
 
@@ -180,6 +204,21 @@ Right of opposition: Inject `IInstallContext` and set OptedOut to true.
 
 <input type="checkbox" checked="@(!OptOut.OptedOut)" @onchange="e => OptOut.OptedOut = !(bool)e.Value!" />
 ```
+
+One site serves every country at once, so the regime is decided per visitor, from the country read
+from `Accept-Language`:
+
+```csharp
+builder.Services.AddAnalytics(o =>
+{
+    o.IngestionUrl = new("https://analytics.example.com/myapp");
+    o.WebOptions.DefaultOptedOutForCountry = country => RequiresConsent(country);   // your own lookup
+});
+```
+
+Until that visitor accepts, no identity cookie is written and nothing is sent. Accepting writes
+`_vau_off=0`, which outranks the default on the next request. `DefaultOptedOut` is the same answer
+for a site serving one regime.
 
 `UseAnalytics()` must run before the response starts — a cookie cannot be set afterwards. 
 If it is too late, the visit is simply not measured.

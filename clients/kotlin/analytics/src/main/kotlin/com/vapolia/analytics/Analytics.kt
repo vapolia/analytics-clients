@@ -52,6 +52,7 @@ object Analytics {
             prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE),
             idLifetimeMs = options.advanced.installIdLifetimeMs,
             refusalLifetimeMs = options.advanced.optOutLifetimeMs,
+            defaultOptedOut = options.defaultOptedOut,
         )
         options.seedInstallId?.invoke()?.let { installIdentity.seed(it) }
 
@@ -75,6 +76,11 @@ object Analytics {
                 )
             },
         )
+
+        // What a previous session spooled must not leave while the person is opted out — or has not
+        // yet answered, under a regime that asks first.
+        if (installIdentity.optedOut)
+            client?.clear(timeoutMs = 0)
 
         (app as? Application)?.registerActivityLifecycleCallbacks(Lifecycle)
     }

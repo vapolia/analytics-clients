@@ -26,6 +26,13 @@ public sealed class AnalyticsOptions
     public bool Enabled { get; set; } = true;
 
     /// <summary>
+    /// What <see cref="IInstallContext.OptedOut"/> answers while the person has not answered. True is
+    /// how a country that requires prior consent is expressed: nothing is sent and no installation id
+    /// is written until the welcome popup sets <see cref="IInstallContext.OptedOut"/> to false.
+    /// </summary>
+    public bool DefaultOptedOut { get; set; }
+
+    /// <summary>
     /// ISO 3166-1 alpha-2 countries excluded from the collection.
     /// Should be a copy of the exclusion list of the collector (the analytics server).
     /// </summary>

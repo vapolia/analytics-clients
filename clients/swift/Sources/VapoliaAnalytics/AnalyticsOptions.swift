@@ -34,6 +34,11 @@ public struct AnalyticsOptions: Sendable {
     /// Toggles collection of analytics. False makes ``Analytics/start(_:)`` a no-op.
     public var enabled: Bool
 
+    /// What ``Analytics/optedOut`` answers while the person has not answered. True is how a country
+    /// that requires prior consent is expressed: nothing is sent and no installation id is written
+    /// until the welcome popup sets ``Analytics/optedOut`` to false.
+    public var defaultOptedOut: Bool
+
     /// ISO 3166-1 alpha-2 countries excluded from the collection. Should be a copy of the exclusion
     /// list of the collector (the analytics server).
     public var excludedCountries: Set<String>
@@ -53,6 +58,7 @@ public struct AnalyticsOptions: Sendable {
         token: String? = nil,
         seedInstallId: (@Sendable () -> InstallSeed?)? = nil,
         enabled: Bool = true,
+        defaultOptedOut: Bool = false,
         excludedCountries: Set<String> = [],
         context: (@Sendable () -> [String: PropValue]?)? = nil,
         advanced: AnalyticsAdvancedOptions = .init(),
@@ -62,6 +68,7 @@ public struct AnalyticsOptions: Sendable {
         self.token = token
         self.seedInstallId = seedInstallId
         self.enabled = enabled
+        self.defaultOptedOut = defaultOptedOut
         self.excludedCountries = Set(excludedCountries.map { $0.uppercased() })
         self.context = context
         self.advanced = advanced

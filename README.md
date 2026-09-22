@@ -2,7 +2,8 @@
 
 Doc: [Contract definition](clients/README.md)  
 Legal: [What integrating a client commits you to](clients/OBLIGATIONS.md)  
-Contributing: [Design notes](clients/README.code.md)
+Contributing: [Design notes](clients/README.code.md)  
+Claude Code: the [`install-client` skill](plugins/analytics-client/skills/install-client/SKILL.md) walks the integration, from the package to the welcome popup. Add this repository as a plugin marketplace.
 
 | Client | Runs on | Package |
 |---|---|---|

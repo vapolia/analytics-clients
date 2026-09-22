@@ -33,6 +33,11 @@ Go 1.24+, standard library only
 An RPC is the usual entry point: the app sends its own install id and device context in the payload,
 and the module forwards them. The server has no device context of its own — do not fabricate one.
 
+`first_open` and `app_open` belong to the app, which alone knows an installation's first run and its
+returns to the foreground. This client has no lifecycle and no stored identity: it sends what the app
+tells it to. The right of opposition belongs to the app as well — this client stores nothing to
+oppose, so an opposed installation simply stops calling the RPC.
+
 ## API
 
 | | |

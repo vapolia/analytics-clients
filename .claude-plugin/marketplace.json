@@ -1,0 +1,18 @@
+{
+  "name": "vapolia-analytics-clients",
+  "owner": {
+    "name": "Vapolia",
+    "email": "contact@vapolia.fr"
+  },
+  "metadata": {
+    "description": "Wire a Vapolia analytics client into an app or a website"
+  },
+  "plugins": [
+    {
+      "name": "analytics-client",
+      "source": "./plugins/analytics-client",
+      "description": "Integrate one of the Vapolia analytics clients: pick the package, wire the three calls, show the welcome popup the visitor's country calls for.",
+      "category": "data"
+    }
+  ]
+}

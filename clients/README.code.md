@@ -36,6 +36,36 @@ durations — `TimeSpan` in .NET, `TimeInterval` in Swift, a `…Ms` suffix in K
 else varies: same names, same defaults, same nesting under `advanced` and `app`. Adding an option to
 one client without the others is a divergence to fix, not a feature.
 
+## Running the tests
+
+| Client | Command |
+|---|---|
+| .NET | `dotnet run --project clients/dotnet/Vapolia.Analytics.Client.Tests` |
+| Kotlin | `./gradlew :analytics:testDebugUnitTest`, from `clients/kotlin` |
+| Swift | `swift test`, on macOS, from the repository root where `Package.swift` lives |
+| JS | `pnpm test`, from `clients/js` |
+| Go | `go test ./...`, from `clients/go` |
+
+The .NET tests run on Microsoft Testing Platform: the test project is an executable and is run as
+one. `dotnet test` reports "Zero tests ran".
+
+## The unanswered state
+
+`optedOut` has three states, held in two: an explicit answer in storage, and `defaultOptedOut` in the
+options for when there is none. The unanswered state reads as opted out under a consent regime and
+writes nothing — a stored refusal would be an answer nobody gave, and it would also start the
+390-day refusal clock. The install id is minted on the first `track`, never at `start`, which is what
+makes an unanswered start harmless; the js client is the exception and mints in `Identity.load()`, so
+it returns before that when unanswered.
+
+`start` clears the spool when the client comes up opted out: what a previous session wrote down must
+not leave under an answer that has since changed, or has not been given.
+
+The web client holds the same three states in one cookie — `1` refused, `0` accepted, absent
+unanswered — and an acceptance is written rather than deleted, so it outranks `DefaultOptedOut` on
+the next request. Its `DefaultOptedOutForCountry` exists because one site serves every regime at
+once, while an app binary runs under one region setting at a time.
+
 ## Why the body is closed
 
 The top level is `installId`, `country`, `context`, `events`. Every client has a test asserting exactly

@@ -48,6 +48,13 @@ data class AnalyticsOptions(
     val enabled: Boolean = true,
 
     /**
+     * What [Analytics.optedOut] answers while the person has not answered. True is how a country
+     * that requires prior consent is expressed: nothing is sent and no installation id is written
+     * until the welcome popup sets [Analytics.optedOut] to false.
+     */
+    val defaultOptedOut: Boolean = false,
+
+    /**
      * ISO 3166-1 alpha-2 countries excluded from the collection. Should be a copy of the exclusion
      * list of the collector (the analytics server).
      */

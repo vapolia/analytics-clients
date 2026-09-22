@@ -1,0 +1,9 @@
+{
+  "name": "analytics-client",
+  "version": "1.0.0",
+  "description": "Integrate one of the Vapolia analytics clients: pick the package, wire the three calls, show the welcome popup the visitor's country calls for.",
+  "author": {
+    "name": "Vapolia",
+    "email": "contact@vapolia.fr"
+  }
+}

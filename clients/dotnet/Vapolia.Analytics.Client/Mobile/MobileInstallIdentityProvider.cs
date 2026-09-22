@@ -26,10 +26,19 @@ public sealed class MobileInstallIdentityProvider : IInstallContext
     /// <summary>
     /// The right of opposition. Turning it on forgets the id, so opting back in cannot resume the same
     /// installation.
+    ///
+    /// Before any answer it reads <see cref="AnalyticsOptions.DefaultOptedOut"/>, which is what a
+    /// country requiring prior consent sets. Nothing is written then: an unanswered question is not a
+    /// refusal, and the id is minted by <see cref="GetInstallId"/>, which an opted-out client never
+    /// reaches.
     /// </summary>
     public bool OptedOut
     {
-        get => Preferences.Get(KeyOptedOut) == "true";
+        get => Preferences.Get(KeyOptedOut) switch
+        {
+            null => options.DefaultOptedOut,
+            var answer => answer == "true",
+        };
         set
         {
             lock (gate)

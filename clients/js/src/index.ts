@@ -61,7 +61,8 @@ export async function start(options: AnalyticsOptions): Promise<void> {
       () => Date.now(),
       resolved.installIdLifetimeMs,
       resolved.optOutLifetimeMs,
-      resolved.seedInstallId
+      resolved.seedInstallId,
+      resolved.defaultOptedOut
     );
     const queue = new Queue(
       resolved,
@@ -88,6 +89,10 @@ export async function start(options: AnalyticsOptions): Promise<void> {
 
     await identity.load();
     await queue.start();
+
+    // What a previous session spooled must not leave while the person is opted out — or has not yet
+    // answered, under a regime that asks first.
+    if (identity.isOptedOut()) await queue.clear();
 
     running.subscription = AppState.addEventListener('change', onAppStateChange);
   })().finally(() => {

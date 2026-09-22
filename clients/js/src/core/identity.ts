@@ -34,7 +34,8 @@ export class Identity {
     private readonly now: () => number = () => Date.now(),
     private readonly idLifetimeMs: number = DEFAULT_LIFETIME_MS,
     private readonly refusalLifetimeMs: number = DEFAULT_LIFETIME_MS,
-    private readonly seedInstallId?: () => InstallSeed | undefined
+    private readonly seedInstallId?: () => InstallSeed | undefined,
+    private readonly defaultOptedOut: boolean = false
   ) {}
 
   /** Reads storage once, rotating the id if it reached its ceiling. */
@@ -52,6 +53,13 @@ export class Identity {
 
     this.loaded = true;
     this.firstOpenSent = firstOpen === 'true';
+
+    // Before any answer, `defaultOptedOut` decides — what a country requiring prior consent sets.
+    // Nothing is written and no id is minted: an unanswered question is not a refusal.
+    if (optedOut === null) {
+      this.optedOut = this.defaultOptedOut;
+      if (this.optedOut) return;
+    }
 
     // Unlike the identifier, a refusal is refreshed on every visit rather than simply bounded: an
     // opposition must not quietly lapse while the app is still in use.

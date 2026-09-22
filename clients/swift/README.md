@@ -77,7 +77,7 @@ The queue is sent and written down when the app backgrounds, on its own, inside 
 | `Analytics.start(_ options: AnalyticsOptions)` | Same, with everything else configurable. |
 | `Analytics.track(_:_:)` | `Analytics.track("theme_apply", ["night": true])`. Props are `PropValue` — string, number or bool — and take literals. |
 | `Analytics.flush()` / `await Analytics.flushAndWait()` | Send what is queued, without / with waiting. |
-| `Analytics.optedOut` | The right of opposition. Off by default; setting it drops the queue and forgets the id. |
+| `Analytics.optedOut` | The right of opposition. Off by default, or `defaultOptedOut` while the person has not answered; setting it drops the queue and forgets the id. |
 | `Analytics.installId` | The current id, for a support screen. Nil when opted out. |
 | `Analytics.stats` | `accepted` / `rejected` / `dropped` / `sent` / `requests`. |
 | `Analytics.context` | What is true of the installation for a whole batch, read again for every event. Every key must be on the source's `context` whitelist. |
@@ -88,7 +88,7 @@ The queue is sent and written down when the app backgrounds, on its own, inside 
 | `await Analytics.stop()` | One last flush, then the sender stops. Rarely needed. |
 
 `AnalyticsOptions` mirrors the .NET client, which is this repository's reference: `ingestionUrl`
-(required), `token`, `seedInstallId`, `enabled`, `excludedCountries`, `context` — and the rest under
+(required), `token`, `seedInstallId`, `enabled`, `defaultOptedOut`, `excludedCountries`, `context` — and the rest under
 `advanced` and `app`:
 
 ```swift
@@ -107,6 +107,25 @@ the collector's ceiling), `queueCapacity` (4000), `maxAttempts` (3), `requestTim
 `optOutLifetime` (390 days each), `logger` (silent; pass `PrintLogger()` while integrating),
 `onError` (`(Error?, String, Bool)`, called on every loss next to the log).
 `app`: `autoFlushOnBackground` (true), `backgroundScope` (nil: the client's own `beginBackgroundTask`).
+
+## A country that asks first
+
+Where consent must be given before anything is stored, start with `defaultOptedOut = true` and let the
+welcome popup answer. Nothing is sent and no installation id is written until it does; an acceptance
+takes effect at once, with no restart, and outranks the default on the next launch.
+
+```swift
+Analytics.start(AnalyticsOptions(
+    ingestionUrl: url,
+    defaultOptedOut: requiresConsent(Locale.current.region?.identifier)   // your own lookup
+))
+
+onAccept = { Analytics.optedOut = false }
+onRefuse = { Analytics.optedOut = true }
+```
+
+Which countries ask first, and what the popup says, are in
+[OBLIGATIONS.md](https://github.com/vapolia/analytics-clients/blob/main/clients/OBLIGATIONS.md).
 
 ## Failure behaviour
 
