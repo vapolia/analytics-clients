@@ -1,6 +1,6 @@
 {
   "name": "@vapolia/analytics",
-  "version": "1.0.0",
+  "version": "1.0.1-beta.1",
   "description": "Expo / React Native client for the Vapolia audience-measurement collector.",
   "license": "MIT",
   "repository": {

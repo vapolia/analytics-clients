@@ -205,9 +205,19 @@ gh release create js-v1.1.0-beta.1 --prerelease --title "JS client 1.1.0-beta.1"
 ```
 
 which runs the publish workflow. It refuses to publish if the tag and `package.json` disagree, runs
-the tests again, and publishes with the `NPM_TOKEN` secret and
-[provenance](https://docs.npmjs.com/generating-provenance-statements). Tests and build run on every
-change, in a separate workflow. Tags are prefixed because this repository also
+the tests again, and stages the version with
+[provenance](https://docs.npmjs.com/generating-provenance-statements). It carries no token: npm
+authenticates the run through the trusted publisher declared on npmjs.com, which names this repository
+and this workflow file.
+
+**Staging is not publishing.** The version reaches npm once a human approves it with their 2FA:
+
+```bash
+npm stage list @vapolia/analytics
+npm stage approve <stage-id>        # or npm stage reject <stage-id>
+```
+
+Tests and build run on every change, in a separate workflow. Tags are prefixed because this repository also
 carries the Kotlin (`kotlin-v*`) and Swift (bare `1.0.0`, as SwiftPM requires) clients; a release event carries no
 tag filter, so each publish workflow starts by checking its own prefix.
 

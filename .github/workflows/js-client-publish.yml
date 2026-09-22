@@ -10,14 +10,19 @@ name: JS client Publish
 # onto the beta and serve it to everyone running `npm i @vapolia/analytics`.
 #
 # A release is the only trigger: the version check below has nothing to compare against otherwise,
-# and a failed run is re-run from its own page.
+# and a failed run is re-run from its own page. The run stages the version; approving it is a second,
+# manual step — see the last step below.
+#
+# Authentication is npm's trusted publishing, declared on npmjs.com under the package's settings:
+# organisation vapolia, repository analytics-clients, workflow js-client-publish.yml. No token, and
+# renaming this file or moving the repository breaks the publish until the declaration follows.
 on:
   release:
     types: [published]
 
 permissions:
   contents: read
-  id-token: write   # npm provenance
+  id-token: write   # what npm's trusted publishing authenticates this run with
 
 concurrency:
   group: js-publish
@@ -86,7 +91,14 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm build
 
-      # --provenance signs the package with this workflow run; it needs the public repository and id-token above.
-      - run: npm publish --access public --provenance --ignore-scripts --tag ${{ steps.version.outputs.tag }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # Trusted publishing needs npm 11.5.1, `npm stage` needs 12; Node 22 ships an older one.
+      - run: npm install -g npm@latest
+
+      # No token: npm authenticates this run through the trusted publisher declared on npmjs.com
+      # (organisation vapolia, repository analytics-clients, workflow js-client-publish.yml), from the
+      # OIDC token id-token above allows. Provenance comes with it, so --provenance is not passed.
+      #
+      # `stage publish`, not `publish`: it uploads the tarball and stops there. The version appears on
+      # npm only once a human approves it with their 2FA — `npm stage approve <stage-id>`, or from the
+      # package's page. `npm stage list @vapolia/analytics` shows what is waiting.
+      - run: npm stage publish . --access public --ignore-scripts --tag ${{ steps.version.outputs.tag }}
