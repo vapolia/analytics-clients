@@ -2,7 +2,7 @@
 
 A dependency-free Android client for the collector (`POST {endpoint}/{source}`).
 
-## TL;DR
+## Summary
 
 ```kotlin
 // build.gradle.kts
@@ -59,7 +59,7 @@ manifest.
 | | |
 |---|---|
 | Installation id | A random UUID in the app's own `SharedPreferences`, renewed after 390 days — the 13-month ceiling, with a margin for clock drift. Never derived from an account, a device id, or an advertising id. |
-| Device context | `country`, and only `country`: the **region setting**, never a geolocation. The platform, the build, the OS version, the device class and the store come from the `Authorization` token, which names the build that was issued it — see the [contract](../README.md#payload). |
+| Device context | `country`, and only `country`: the **region setting**, never a geolocation. The platform, the build, the OS version, the device class and the store come from the `Authorization` token, which names the build that was issued it — see the [contract](https://github.com/vapolia/analytics-clients/blob/main/clients/README.md#payload). |
 | Time zone | Each event carries the device offset in minutes east of UTC (`tz`), read at the instant of the event, apart from its UTC `ts`. |
 | `isFirstRun` | Whether the installation has been seen before, so *your* `first_open` fires once — kept apart from the id, so a renewal is not a new install. |
 | `onForeground` / `onBackground` | The activity lifecycle the client already watches to flush, with its rotation guard. |
@@ -126,10 +126,10 @@ Measurement must never fail a user action, so nothing surfaces an error:
 - Batch-context keys are whitelisted server-side too, under `context:` — a key nobody declared is
   silence, exactly like an event name.
 - A context value must stay a bucket, never a birth date, an account id, or anything derived from one.
-- Countries in the excluded list (the source's `excludedCountries`, e.g. `KR` for a 13+ app: PIPA requires a guardian's
-  consent under 14) are refused here as well as by the collector. The list is empty by default: pass it.
-- The privacy policy, the store declarations and the opposition switch in the UI are the app's
-  obligations — see [OBLIGATIONS.md](../OBLIGATIONS.md).
+- `excludedCountries` is empty by default: pass the list that applies to your app. What is in it is
+  refused here as well as by the collector.
+- The privacy policy, the store declarations, the opposition switch and the list of excluded countries
+  are the app's obligations — see [OBLIGATIONS.md](https://github.com/vapolia/analytics-clients/blob/main/clients/OBLIGATIONS.md).
 
 ## Build and test
 
@@ -147,15 +147,15 @@ sanitizer, the encoder, the spool and the transport are plain Kotlin, which is w
 `com.vapolia.analytics:analytics`, to Maven Central through the
 [vanniktech plugin](https://vanniktech.github.io/gradle-maven-publish-plugin/).
 
-The usual path is a GitHub release: bump `VERSION_NAME` in [`gradle.properties`](gradle.properties),
+The usual path is a GitHub release: bump `VERSION_NAME` in [`gradle.properties`](https://github.com/vapolia/analytics-clients/blob/main/clients/kotlin/gradle.properties),
 commit, then
 
 ```bash
 gh release create kotlin-v1.0.1 --title "Kotlin client 1.0.1" --notes "..."
 ```
 
-which runs [`.github/workflows/kotlin-client-publish.yml`](../../.github/workflows/kotlin-client-publish.yml) — it
-refuses to publish if the tag and `VERSION_NAME` disagree, runs the tests again, and uploads. The
+which runs the publish workflow. It refuses to publish if the tag and `VERSION_NAME` disagree, runs
+the tests again, and uploads. The
 release itself is then validated by hand on the Central Portal. Its four secrets:
 `MAVEN_CENTRAL_USERNAME`, `MAVEN_CENTRAL_PASSWORD`, `SIGNING_IN_MEMORY_KEY`,
 `SIGNING_IN_MEMORY_KEY_PASSWORD`.

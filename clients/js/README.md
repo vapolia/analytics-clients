@@ -2,7 +2,7 @@
 
 A dependency-free TypeScript client for the collector (`POST {endpoint}/{source}`).
 
-## TL;DR
+## Summary
 
 ```ts
 import Analytics from '@vapolia/analytics';
@@ -62,7 +62,7 @@ npx expo install expo-localization expo-device expo-application
 
 It is the only one left: the platform, the build, the OS version and the device class used to be read
 from `expo-device` and `expo-application`, and they now come from the `Authorization` token instead —
-see the [contract](../README.md#payload). An app that passes its own region needs no Expo package at
+see the [contract](https://github.com/vapolia/analytics-clients/blob/main/clients/README.md#payload). An app that passes its own region needs no Expo package at
 all:
 
 ```ts
@@ -82,7 +82,7 @@ without a store release.
 | Installation id | A random v4 UUID in AsyncStorage, renewed after 390 days — the 13-month ceiling, with a margin for clock drift. **Not** in SecureStore/keychain: those survive the app being deleted, which would make the id outlive the installation it names. |
 | `isFirstRun()` | Whether the installation has been seen before, so *your* `first_open` fires once — kept apart from the id, so a renewal is not a new install. |
 | `lifecycle.onForeground` / `onBackground` | The `AppState` transitions the client already listens to in order to flush and spool. |
-| Device context | `country`, and only `country`: the **region setting**, never a geolocation. The platform, the build, the OS version, the device class and the store come from the `Authorization` token — see the [contract](../README.md#payload). |
+| Device context | `country`, and only `country`: the **region setting**, never a geolocation. The platform, the build, the OS version, the device class and the store come from the `Authorization` token — see the [contract](https://github.com/vapolia/analytics-clients/blob/main/clients/README.md#payload). |
 | Time zone | Each event carries the device offset in minutes east of UTC (`tz`), read at the instant of the event, apart from its UTC `ts`. |
 | Spool | The queue is written to storage ~500 ms after each event, and read back once on the next launch. |
 
@@ -153,10 +153,10 @@ it is opt-in.
 - Batch-context keys are whitelisted server-side too, under `context:` — a key nobody declared is
   silence, exactly like an event name.
 - A context value must stay a bucket, never a birth date, an account id, or anything derived from one.
-- Countries in the excluded list (the source's `excludedCountries`, e.g. `KR` for a 13+ app: PIPA requires a guardian's
-  consent under 14) are refused here as well as by the collector. The list is empty by default: pass it.
-- The privacy policy, the store declarations and the opposition switch in the UI are the app's
-  obligations — see [OBLIGATIONS.md](../OBLIGATIONS.md).
+- `excludedCountries` is empty by default: pass the list that applies to your app. What is in it is
+  refused here as well as by the collector.
+- The privacy policy, the store declarations, the opposition switch and the list of excluded countries
+  are the app's obligations — see [OBLIGATIONS.md](https://github.com/vapolia/analytics-clients/blob/main/clients/OBLIGATIONS.md).
 
 ## Build and test
 
@@ -176,7 +176,7 @@ pnpm build       # react-native-builder-bob: CommonJS + ESM + types
 npm publish --access public       # or push a js-v* tag, see the workflow
 ```
 
-The version is the tag: bump `version` in [`package.json`](package.json), commit, then publish a
+The version is the tag: bump `version` in [`package.json`](https://github.com/vapolia/analytics-clients/blob/main/clients/js/package.json), commit, then publish a
 GitHub release whose tag carries it.
 
 ```bash
@@ -184,11 +184,10 @@ gh release create js-v1.0.1 --title "JS client 1.0.1" --notes "..."
 gh release create js-v1.1.0-beta.1 --prerelease --title "JS client 1.1.0-beta.1" --notes "..."
 ```
 
-which runs [`.github/workflows/js-client-publish.yml`](../../.github/workflows/js-client-publish.yml) — it refuses
-to publish if the tag and `package.json` disagree, runs the tests again, and publishes with the
-`NPM_TOKEN` secret and [provenance](https://docs.npmjs.com/generating-provenance-statements). Tests
-and build on every change are the separate
-[`js-client-test.yml`](../../.github/workflows/js-client-test.yml). Tags are prefixed because this repository also
+which runs the publish workflow. It refuses to publish if the tag and `package.json` disagree, runs
+the tests again, and publishes with the `NPM_TOKEN` secret and
+[provenance](https://docs.npmjs.com/generating-provenance-statements). Tests and build run on every
+change, in a separate workflow. Tags are prefixed because this repository also
 carries the Kotlin (`kotlin-v*`) and Swift (bare `1.0.0`, as SwiftPM requires) clients; a release event carries no
 tag filter, so each publish workflow starts by checking its own prefix.
 

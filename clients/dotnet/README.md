@@ -14,7 +14,7 @@ Nugets:
 <PackageReference Include="Vapolia.Analytics.Client.AspNetCore" Version="1.0.0" />
 ```
 
-## TL;DR
+## Summary
 
 ### Quick Setup
 Standalone apps:  
@@ -72,6 +72,13 @@ lifecycle.Foreground += () => analytics.Track("app_open");
 | Time zone | Each event carries the device offset in minutes east of UTC (`tz`), read at the instant of the event, apart from its UTC `ts`. |
 
 Turn the background flush off with `AutoFlushOnBackground = false`.
+
+## What this client cannot check for you
+
+- `ExcludedCountries` is empty by default: pass the list that applies to your app. What is in it is
+  refused here as well as by the collector.
+- The privacy policy, the store declarations, the opposition switch and the list of excluded countries
+  are the app's obligations — see [OBLIGATIONS.md](https://github.com/vapolia/analytics-clients/blob/main/clients/OBLIGATIONS.md).
 
 ## Options
 
@@ -151,7 +158,7 @@ o.OnError = (exception, reason, permanent) =>
 
 It is null for a loss with no exception behind it — a 4xx, or a saturated window.
 
-## Web: GDPR compliant cookies
+## Web: what is stored in the browser
 
 This only holds for server-rendered Blazor.
 
@@ -163,7 +170,7 @@ Two consequences:
 | | |
 |---|---|
 | **Install id** | A first-party cookie (`_vau`, HttpOnly, Secure, SameSite=Lax) that the server sets once. It expires after 13 months. |
-| **Country** | Automatically extracted from `Accept-Language`. Never extracted from IP geolocation to protect privacy. |
+| **Country** | Automatically extracted from `Accept-Language`, never from IP geolocation. |
 | **Opposition** | A second cookie, `_vau_off`. When present the visitor is not measured. Refreshed on each visit. |
 
 Right of opposition: Inject `IInstallContext` and set OptedOut to true.
@@ -266,9 +273,7 @@ JSON goes through `System.Text.Json` [source generation](https://learn.microsoft
 
 ## Publishing
 
-See [`dotnet-client-publish.yml`](../../.github/workflows/dotnet-client-publish.yml)
-
-It needs a trusted-publishing policy on nuget.org
+A release runs the publish workflow. It needs a trusted-publishing policy on nuget.org.
 
 ### Pre-releases
 

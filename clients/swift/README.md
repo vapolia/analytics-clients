@@ -2,7 +2,7 @@
 
 A dependency-free Swift client for the collector (`POST {endpoint}/{source}`).
 
-## TL;DR
+## Summary
 
 ```swift
 import VapoliaAnalytics
@@ -59,7 +59,7 @@ The manifest lives at the repository root because SwiftPM requires it there; the
 | | |
 |---|---|
 | Installation id | A random UUID in `UserDefaults`, renewed after 390 days — the 13-month ceiling, with a margin for clock drift. **Not** in the Keychain: a Keychain item survives the app being deleted, which would make the id outlive the installation it names. |
-| Device context | `country`, and only `country`: the **region setting**, never a geolocation. The platform, the build, the OS version, the device class and the store come from the `Authorization` token, which names the build that was issued it — see the [contract](../README.md#payload). |
+| Device context | `country`, and only `country`: the **region setting**, never a geolocation. The platform, the build, the OS version, the device class and the store come from the `Authorization` token, which names the build that was issued it — see the [contract](https://github.com/vapolia/analytics-clients/blob/main/clients/README.md#payload). |
 | Time zone | Each event carries the device offset in minutes east of UTC (`tz`), read at the instant of the event, apart from its UTC `ts`. |
 | `isFirstRun` | Whether the installation has been seen before, so *your* `first_open` fires once — kept apart from the id, so a renewal is not a new install. |
 | `firstSeen` | When the installation was first seen, kept across id renewals. Feed it to `InstallAge.bucket(firstSeen:now:)` for a `"0"` / `"1-7"` / `"8-30"` / `"31-90"` / `"90+"` bucket, if your source whitelists a key for it. |
@@ -128,11 +128,11 @@ Measurement must never fail a user action, so nothing surfaces an error:
 - Batch-context keys are whitelisted server-side too, under `context:` — a key nobody declared is
   silence, exactly like an event name.
 - A context value must stay a bucket, never a birth date, an account id, or anything derived from one.
-- Countries in the excluded list (the source's `excludedCountries`, e.g. `KR` for a 13+ app: PIPA requires a guardian's
-  consent under 14) are refused here as well as by the collector. The list is empty by default: pass it.
-- The privacy policy, the App Store declarations and the opposition switch in the UI are the app's
-  obligations — see [OBLIGATIONS.md](../OBLIGATIONS.md). The bundled privacy manifest covers the
-  SDK's own declaration, not the app's *App Privacy* answers.
+- `excludedCountries` is empty by default: pass the list that applies to your app. What is in it is
+  refused here as well as by the collector.
+- The privacy policy, the App Store declarations, the opposition switch and the list of excluded
+  countries are the app's obligations — see [OBLIGATIONS.md](https://github.com/vapolia/analytics-clients/blob/main/clients/OBLIGATIONS.md). The bundled privacy
+  manifest covers the SDK's own declaration, not the app's *App Privacy* answers.
 
 ## Build and test
 
@@ -143,8 +143,7 @@ xcodebuild test -scheme VapoliaAnalytics -destination 'platform=iOS Simulator,na
 
 The manifest declares a macOS platform alongside iOS and macCatalyst. macOS is not a shipping target
 — it is what `swift test` compiles for on a Mac, which catches a compile error in seconds instead of
-waiting on a simulator. [`.github/workflows/swift-client-test.yml`](../../.github/workflows/swift-client-test.yml)
-runs both, the fast one first.
+waiting on a simulator. CI runs both, the fast one first.
 
 The UIKit layer is a thin shell (`Analytics`, `DeviceProbe`); the sender, the sanitizer, the encoder,
 the spool and the transport are Foundation-only, which is what the 42 tests cover.

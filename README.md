@@ -1,7 +1,8 @@
 # Vapolia Analytics: Clients SDK 
 
 Doc: [Contract definition](clients/README.md)  
-Legal: [Consumer obligations](clients/OBLIGATIONS.md)
+Legal: [What integrating a client commits you to](clients/OBLIGATIONS.md)  
+Contributing: [Design notes](clients/README.code.md)
 
 | Client | Runs on | Package |
 |---|---|---|
@@ -13,11 +14,12 @@ Legal: [Consumer obligations](clients/OBLIGATIONS.md)
 | [Go](clients/go/README.md) | Servers | `github.com/vapolia/analytics-clients/clients/go` |
 
 [![NuGet][dotnet-nuget-img]][dotnet-nuget-link]
+[![NuGet][aspnet-nuget-img]][aspnet-nuget-link]
+[![npm][js-npm-img]][js-npm-link]
 
-[dotnet-nuget-img]: https://img.shields.io/nuget/v/Vapolia.WheelPicker
-[dotnet-nuget-link]: https://www.nuget.org/packages/Vapolia.WheelPicker/
-[nuget-link-forms]: https://www.nuget.org/packages/Vapolia.WheelPicker.Forms/
-[demo-img]: https://img.shields.io/badge/demo-source%20code-lightgrey.svg
-[demo-link]: https://github.com/softlion/WheelPicker-Samples/tree/main/Demos
-[video-img2]: https://i.imgur.com/BKTYa8G.png
-[video-link2]: https://vimeo.com/488497139
+[dotnet-nuget-img]: https://img.shields.io/nuget/v/Vapolia.Analytics.Client
+[dotnet-nuget-link]: https://www.nuget.org/packages/Vapolia.Analytics.Client/
+[aspnet-nuget-img]: https://img.shields.io/nuget/v/Vapolia.Analytics.Client.AspNetCore
+[aspnet-nuget-link]: https://www.nuget.org/packages/Vapolia.Analytics.Client.AspNetCore/
+[js-npm-img]: https://img.shields.io/npm/v/@vapolia/analytics
+[js-npm-link]: https://www.npmjs.com/package/@vapolia/analytics

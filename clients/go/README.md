@@ -2,7 +2,7 @@
 
 A dependency-free Go client for the collector (`POST {endpoint}/{source}`), written for server-side callers.
 
-## TL;DR
+## Summary
 
 ```go
 client, _ := analytics.New(analytics.Options{IngestionUrl: "https://analytics.example.com/<sourceName>"})
@@ -69,7 +69,7 @@ that *are* here are the ones the other clients use.
 
 `Device` is `Country` alone — the region setting the app reported, never derived from the client
 address. The platform, the build, the OS version, the device class and the store come from the
-`Authorization` token; see the [contract](../README.md#payload). It stays comparable, so it can key
+`Authorization` token; see the [contract](https://github.com/vapolia/analytics-clients/blob/main/clients/README.md#payload). It stays comparable, so it can key
 the batching.
 
 What is true of the *installation* — a plan, a finished tutorial, an install-age bucket — is the batch
@@ -99,10 +99,10 @@ over a smaller one, and raise `RateLimit:PermitsPerWindow` if a server legitimat
 ## What this client cannot check for you
 
 - `installID` must be the device's own rotated random id. A user id, a session id, or a hash
-  of either would create the join to a person that the whole design avoids — see [OBLIGATIONS.md](../OBLIGATIONS.md).
+  of either would create the join to a person that the whole design avoids — see [OBLIGATIONS.md](https://github.com/vapolia/analytics-clients/blob/main/clients/OBLIGATIONS.md).
 - `Country` is the device's region setting. Never geolocate the client address.
-- Countries in the excluded list (the source's `excludedCountries`, e.g. `KR` for a 13+ app: PIPA requires a guardian's
-  consent under 14) are refused here as well as by the collector. The list is empty by default: pass it.
+- `excludedCountries` is empty by default: pass the list that applies to your app. What is in it is
+  refused here as well as by the collector — see [OBLIGATIONS.md](https://github.com/vapolia/analytics-clients/blob/main/clients/OBLIGATIONS.md).
 
 ## Tests
 

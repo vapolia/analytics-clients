@@ -1,12 +1,90 @@
 # What integrating one of these clients commits you to
 
-For whoever wires a Vapolia analytics client into an app or a site. The clients carry a lot of the
-regime, but four things cannot be carried by a library, and they are yours.
+For whoever wires a Vapolia analytics client into an app or a website.  
+The clients carry a lot of the regime, but four things cannot be carried by a library, and they are yours.
 
-The regime is the French consent-exempt audience measurement one (CNIL). The collector operator
-holds the legal dossier; this page is the developer-facing summary of what it expects from you.
+The clients are built to the criteria that exempt audience measurement from consent: first-party, own
+use, aggregated statistics, no cross-app or cross-site tracking, nothing shared, an identifier renewed
+at 13 months. Where a country asks for more, the section below says so. The collector operator holds the legal dossier, and this
+page is the developer-facing summary of what it expects from you.
 
-## TL;DR
+## The welcome popup
+
+What a country requires is not a property of the EU. Storing an identifier on a device is governed by
+article 5(3) of the ePrivacy directive, transposed one country at a time, and only a few authorities
+have published criteria exempting audience measurement from consent. Four regimes follow. Pick from
+the device region setting, the same value the clients send as `country`.
+
+This list is a starting point for your own counsel, not a legal opinion. Authority positions move.
+
+### 1. Exempt from consent
+
+**France, Italy, Spain, Netherlands.**
+
+Their authorities published criteria under which first-party audience measurement needs no consent:
+own use, aggregated statistics, no cross-app or cross-site tracking, nothing shared. The clients meet
+them. Information remains mandatory.
+
+```text
+┌────────────────────────────────────────────────────────┐
+│                  WELCOME FIRST USE                     │
+│                                                        │
+│ By using this app, you accept our Terms and Conditions │
+│ [link to open/view terms].                             │
+│                                                        │
+│              [ CONTINUE ]                              │
+│                                                        │
+└────────────────────────────────────────────────────────┘
+```
+
+The Terms link has to reach a privacy policy naming the measurement, the identifier and its lifetime.
+
+### 2. Consent required
+
+**The rest of the EEA plus the United Kingdom and Quebec.**
+
+Nothing is sent until the person has answered.
+
+```text
+┌────────────────────────────────────────────────────────┐
+│                  WELCOME FIRST USE                     │
+│                                                        │
+│ By using this app, you accept our Terms and Conditions │
+│ [link to open/view terms].                             │
+│                                                        │
+│ May we measure how you use it, anonymously? You can    │
+│ change your answer at any time in Settings.            │
+│                                                        │
+│              [ REFUSE ]        [ ACCEPT ]              │
+│                                                        │
+└────────────────────────────────────────────────────────┘
+```
+
+Both buttons carry the same style, the same size and the same prominence. A refusal placed one level
+below the acceptance — secondary style, link button, extra tap — is what the CNIL fined Google and
+Facebook for in 2021.
+
+The question governs the measurement alone. `REFUSE` must not read as refusing the Terms, which is
+why it is phrased as a question about the measurement rather than as a statement.
+
+Wire the answer to the client's opt-out, and leave the switch reachable in Settings.
+
+### 3. Notice, no prior consent
+
+**United States, Canada outside Quebec, Brazil, Switzerland, Japan, Australia**, and most of the
+rest of the world.
+
+The popup of regime 1 is enough. What these require is notice at collection and a reachable opt-out.
+
+### 4. Not measured at all
+
+**South Korea.** PIPA requires guardian consent below 14, which an app rated 13+ cannot obtain. Pass
+`KR` in `excludedCountries`; the collector refuses it as well.
+
+China and Russia raise data-localisation and export questions that this page does not cover. Ask the
+collector operator before shipping there.
+
+## Summary
 
 1. **Inform.** The exemption waives consent, **not information** (art. 82 LIL). Say in your privacy
    policy that you measure audience, with what identifier, for how long.
