@@ -101,9 +101,12 @@ jobs:
           dotnet pack $env:CLIENT -c Release -o artifacts "/p:Version=$env:VERSION"
           dotnet pack $env:ASPNETCORE -c Release -o artifacts "/p:Version=$env:VERSION"
 
+      # bash expands the glob: NuGet's own wildcard resolution fails on a forward-slash path on Windows.
       - name: Push
-        run: >
-          dotnet nuget push "artifacts/*.nupkg"
-          --source https://api.nuget.org/v3/index.json
-          --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
-          --skip-duplicate
+        run: |
+          for package in artifacts/*.nupkg; do
+            dotnet nuget push "$package" \
+              --source https://api.nuget.org/v3/index.json \
+              --api-key ${{ steps.login.outputs.NUGET_API_KEY }} \
+              --skip-duplicate
+          done
