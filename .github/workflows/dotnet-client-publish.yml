@@ -56,10 +56,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: '10.0.x'
-
       - name: Derive the version from the tag
         run: |
           version="${TAG#dotnet-v}"
@@ -74,6 +70,18 @@ jobs:
           fi
           echo "publishing $version"
           echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      # Before the minutes spent on workloads, tests and packing: a trusted-publishing policy that
+      # does not match this workflow fails here rather than at the end.
+      - name: NuGet login OIDC
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: vapolia
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
 
       # Only this project multi-targets android/ios/maccatalyst, and restoring it evaluates every
       # entry, so its own TFMs name the workloads to install.
@@ -92,12 +100,6 @@ jobs:
         run: |
           dotnet pack $env:CLIENT -c Release -o artifacts "/p:Version=$env:VERSION"
           dotnet pack $env:ASPNETCORE -c Release -o artifacts "/p:Version=$env:VERSION"
-
-      - name: NuGet login OIDC
-        id: login
-        uses: NuGet/login@v1
-        with:
-          user: vapolia
 
       - name: Push
         run: >
