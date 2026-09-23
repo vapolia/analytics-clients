@@ -8,7 +8,7 @@ namespace Vapolia.Analytics.Client;
 /// one call per event:
 ///
 /// <code>
-/// MobileAnalytics.Start(new AnalyticsOptions { Source = "&lt;sourceName&gt;" });
+/// MobileAnalytics.Start(new AnalyticsOptions { IngestionUrl = new("https://analytics.example.com/&lt;sourceName&gt;") });
 /// MobileAnalytics.Current.Track("game_end", ("result", "win"), ("moves", 34));
 /// </code>
 ///
@@ -22,6 +22,7 @@ namespace Vapolia.Analytics.Client;
 public static class MobileAnalytics
 {
     static Sender? sender;
+    static AnalyticsOptions? startedOptions;
     static IAnalytics? current;
     static readonly Lock Gate = new();
     static readonly AppLifecycleEvents lifecycle = new();
@@ -33,7 +34,7 @@ public static class MobileAnalytics
 
     /// <summary>
     /// The installation identity, once started: the opposition switch lives here, and so does the
-    /// device context an app can complete with <see cref="MobileInstallIdentityProvider.Update"/>.
+    /// country an app can correct with <see cref="MobileInstallIdentityProvider.Country"/>.
     /// </summary>
     public static MobileInstallIdentityProvider? Identity { get; private set; }
 
@@ -66,7 +67,7 @@ public static class MobileAnalytics
             if (current is not null)
                 return current;
 
-            if (!options.IngestionUrl.IsAbsoluteUri)
+            if (options.IngestionUrl is not { IsAbsoluteUri: true })
                 throw new InvalidOperationException($"Invalid {nameof(AnalyticsOptions)}.{nameof(AnalyticsOptions.IngestionUrl)}: must be an absolute URL '{options.IngestionUrl}'");
 
             httpClient ??= options.AdvancedOptions.CreateHttpClient?.Invoke() ?? new HttpClient { Timeout = options.AdvancedOptions.RequestTimeout };
@@ -86,11 +87,15 @@ public static class MobileAnalytics
                 spool,
                 logger ?? NullLogger.Instance);
 
+            // An opposition forgets what is queued, retained or spooled, not only what comes next.
+            identity.OptedOut = () => started.Purge();
+
             sender = started;
+            startedOptions = options;
             Identity = identity;
             current = new Analytics(started, identity, context, options, timeZone ?? new DeviceTimeZone());
 
-            Bootstrap(started, options);
+            AppLifecycle.Subscribe(OnForeground, OnBackground);
             return current;
         }
     }
@@ -111,6 +116,7 @@ public static class MobileAnalytics
         {
             stopping = sender;
             sender = null;
+            startedOptions = null;
             current = null;
             Identity = null;
         }
@@ -119,16 +125,25 @@ public static class MobileAnalytics
             await stopping.DisposeAsync().ConfigureAwait(false);
     }
 
+    static void OnForeground() => lifecycle.RaiseForeground();
+
     /// <summary>
-    /// Auto flush when the app is backgrounded
+    /// Auto flush when the app is backgrounded. Reads the sender started last: the platform subscription
+    /// is made once and outlives <see cref="StopAsync"/>.
     /// </summary>
-    static void Bootstrap(Sender started, AnalyticsOptions options)
-        => AppLifecycle.Subscribe(
-            onForeground: () => lifecycle.RaiseForeground(),
-            onBackground: () =>
-            {
-                lifecycle.RaiseBackground();
-                if (options.AppOptions.FlushesOnBackground)
-                    _ = started.FlushAsync(persist: true);
-            });
+    static void OnBackground()
+    {
+        lifecycle.RaiseBackground();
+
+        Sender? started;
+        AnalyticsOptions? options;
+        lock (Gate)
+        {
+            started = sender;
+            options = startedOptions;
+        }
+
+        if (started is not null && options?.AppOptions.FlushesOnBackground == true)
+            _ = started.FlushAsync(persist: true);
+    }
 }

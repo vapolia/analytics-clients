@@ -28,7 +28,10 @@ public sealed class AnalyticsAdvancedOptions
     /// <summary>Max events that can wait to be sent. Beyond it Track() drops everything.</summary>
     public int QueueCapacity { get; set; } = 4000;
 
-    /// <summary>Max attempts to send a batch before it is deleted.</summary>
+    /// <summary>
+    /// Max attempts to send a batch during one flush. Events still unsent after that are kept for the next
+    /// flush, until they are 7 days old or the queue is full.
+    /// </summary>
     public int MaxAttempts { get; set; } = 3;
 
     /// <summary>Timeout when posting analytics data to the collector.</summary>

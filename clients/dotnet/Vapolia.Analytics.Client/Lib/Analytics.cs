@@ -11,9 +11,9 @@ sealed class Analytics(
 
     public void Track(string name, IReadOnlyDictionary<string, object?>? props = null)
     {
-        var installId = Clean.InstallId(identity.GetInstallId());
+        var installId = Clean.InstallId(identity.InstallId);
         var eventName = Clean.Text(name, Clean.MaxValueLength);
-        var device = identity.GetDevice().Cleaned(options?.ExcludedCountries);
+        var device = new Device { Country = identity.Country }.Cleaned(options?.ExcludedCountries);
 
         if (installId is null || eventName.IsEmpty || device is null)
         {
@@ -53,9 +53,12 @@ sealed class Analytics(
     {
         var current = context?.GetContext() ?? options?.Context?.Invoke();
         var cleaned = Clean.Props(current, Clean.MaxContextKeys);
-        return cleaned is null
-            ? "{}"
-            : System.Text.Json.JsonSerializer.Serialize(cleaned, AnalyticsJsonContext.Default.DictionaryStringPropValue);
+        if (cleaned is null)
+            return "{}";
+
+        // Sorted by key: the same context built in another order must give the same text.
+        var sorted = new Dictionary<string, PropValue>(cleaned.OrderBy(p => p.Key, StringComparer.Ordinal), StringComparer.Ordinal);
+        return System.Text.Json.JsonSerializer.Serialize(sorted, AnalyticsJsonContext.Default.DictionaryStringPropValue);
     }
 
     public void Track(string name, params ReadOnlySpan<(string Key, object? Value)> props)

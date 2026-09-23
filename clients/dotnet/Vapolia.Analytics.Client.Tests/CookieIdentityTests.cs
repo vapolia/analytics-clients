@@ -43,7 +43,7 @@ public class CookieIdentityTests
     {
         var (provider, context) = Create();
 
-        var id = provider.GetInstallId();
+        var id = provider.InstallId;
 
         Assert.IsNotNull(Clean.InstallId(id));
         var setCookie = context.Response.Headers.SetCookie.ToString();
@@ -58,7 +58,7 @@ public class CookieIdentityTests
     {
         var (provider, context) = Create(cookie: InstallId);
 
-        var id = provider.GetInstallId();
+        var id = provider.InstallId;
 
         Assert.AreEqual(InstallId, id);
         Assert.AreEqual(
@@ -72,7 +72,7 @@ public class CookieIdentityTests
     {
         var (provider, _) = Create(cookie: "not-a-guid");
 
-        var id = provider.GetInstallId();
+        var id = provider.InstallId;
 
         Assert.IsNotNull(Clean.InstallId(id));
         Assert.AreNotEqual("not-a-guid", id);
@@ -83,7 +83,7 @@ public class CookieIdentityTests
     {
         var (provider, _) = Create();
 
-        Assert.AreEqual(provider.GetInstallId(), provider.GetInstallId());
+        Assert.AreEqual(provider.InstallId, provider.InstallId);
     }
 
     [TestMethod]
@@ -92,7 +92,7 @@ public class CookieIdentityTests
         var (provider, context) = Create(optedOut: true);
 
         Assert.IsTrue(provider.IsOptedOut);
-        Assert.IsNull(provider.GetInstallId());
+        Assert.IsNull(provider.InstallId);
         Assert.AreEqual(
             "",
             context.Response.Headers.SetCookie.ToString(),
@@ -103,7 +103,7 @@ public class CookieIdentityTests
     public void OpposingDropsTheIdentityCookie()
     {
         var (provider, context) = Create(cookie: InstallId);
-        Assert.AreEqual(InstallId, provider.GetInstallId());
+        Assert.AreEqual(InstallId, provider.InstallId);
 
         provider.IsOptedOut = true;
 
@@ -132,7 +132,7 @@ public class CookieIdentityTests
         var (provider, context) = Create(configure: o => o.RequiresPriorConsent = true);
 
         Assert.IsTrue(provider.IsOptedOut);
-        Assert.IsNull(provider.GetInstallId());
+        Assert.IsNull(provider.InstallId);
         Assert.AreEqual("", context.Response.Headers.SetCookie.ToString());
     }
 
@@ -142,7 +142,7 @@ public class CookieIdentityTests
         var (provider, _) = Create(accepted: true, configure: o => o.RequiresPriorConsent = true);
 
         Assert.IsFalse(provider.IsOptedOut);
-        Assert.IsNotNull(Clean.InstallId(provider.GetInstallId()));
+        Assert.IsNotNull(Clean.InstallId(provider.InstallId));
     }
 
     [TestMethod]
@@ -188,9 +188,9 @@ public class CookieIdentityTests
     {
         var (provider, _) = Create(acceptLanguage: "fr-FR,fr;q=0.9,en;q=0.8");
 
-        var device = provider.GetDevice();
+        var country = provider.Country;
 
-        Assert.AreEqual("FR", device.Country);
+        Assert.AreEqual("FR", country);
     }
 
     [TestMethod]
@@ -198,9 +198,9 @@ public class CookieIdentityTests
     {
         var (provider, _) = Create(acceptLanguage: "fr");
 
-        var device = provider.GetDevice();
+        var country = provider.Country;
 
-        Assert.IsNull(device.Country, "a language without a region is an unknown country, never a guessed one");
+        Assert.IsNull(country, "a language without a region is an unknown country, never a guessed one");
     }
 
     [TestMethod]
@@ -208,9 +208,9 @@ public class CookieIdentityTests
     {
         var (provider, _) = Create(acceptLanguage: "%%%");
 
-        var device = provider.GetDevice();
+        var country = provider.Country;
 
-        Assert.IsNull(device.Country);
+        Assert.IsNull(country);
     }
 
     [TestMethod]
@@ -218,8 +218,57 @@ public class CookieIdentityTests
     {
         var (provider, _) = Create();
 
-        var device = provider.GetDevice();
+        var country = provider.Country;
 
-        Assert.IsNull(device.Country);
+        Assert.IsNull(country);
+    }
+
+    [TestMethod]
+    public void AnOppositionTakesEffectWithinTheSameRequest()
+    {
+        var (provider, _) = Create(cookie: InstallId);
+        Assert.AreEqual(InstallId, provider.InstallId);
+
+        provider.IsOptedOut = true;
+
+        Assert.IsTrue(provider.IsOptedOut);
+        Assert.IsNull(provider.InstallId);
+    }
+
+    [TestMethod]
+    public void AnAcceptanceTakesEffectWithinTheSameRequest()
+    {
+        var (provider, _) = Create(configure: o => o.RequiresPriorConsent = true);
+        Assert.IsNull(provider.InstallId);
+
+        provider.IsOptedOut = false;
+
+        Assert.IsNotNull(provider.InstallId);
+    }
+
+    [TestMethod]
+    public async Task AnOppositionPurgesTheVisitorsQueuedEvents()
+    {
+        var collector = new FakeCollector();
+        var options = new AnalyticsOptions { IngestionUrl = new Uri("https://localhost/testsource"), RequiresPriorConsent = false };
+        options.AdvancedOptions.FlushInterval = TimeSpan.FromHours(1);
+        await using var sender = new Sender(options, collector, null, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
+
+        var context = new DefaultHttpContext();
+        context.Request.Headers.Cookie = $"{options.WebOptions.CookieName}={InstallId}";
+        var provider = new CookieInstallIdentityProvider(new HttpContextAccessor { HttpContext = context }, Options.Create(options))
+        {
+            Sender = () => sender,
+        };
+        var analytics = new Analytics(sender, provider, options: options);
+
+        analytics.Track("app_open");
+        provider.IsOptedOut = true;
+        analytics.Track("game_end");
+        await sender.FlushAsync();
+
+        Assert.AreEqual(0, collector.Bodies.Count);
+        Assert.AreEqual(1, sender.Stats.Dropped);
+        Assert.AreEqual(1, sender.Stats.Rejected);
     }
 }

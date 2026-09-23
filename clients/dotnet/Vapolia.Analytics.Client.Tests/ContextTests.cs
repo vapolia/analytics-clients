@@ -178,8 +178,8 @@ public class BatchContextTests
 
     sealed class Identity : IInstallContext
     {
-        public string GetInstallId() => InstallId;
-        public Device GetDevice() => new() { Country = "FR" };
+        public string? InstallId => BatchContextTests.InstallId;
+        public string? Country => "FR";
         public bool IsOptedOut { get; set; }
     }
 
@@ -250,6 +250,24 @@ public class BatchContextTests
     }
 
     [TestMethod]
+    public async Task TheSameContextInAnotherKeyOrderGroupsIntoOneBatch()
+    {
+        var reversed = false;
+        var collector = new FakeCollector();
+        await using var sender = new Sender(Options(), collector, null, NullLogger.Instance);
+        var analytics = new Analytics(sender, new Identity(), new Context(() => reversed
+            ? new Dictionary<string, object?> { ["plan"] = "free", ["tutorial_done"] = true }
+            : new Dictionary<string, object?> { ["tutorial_done"] = true, ["plan"] = "free" }));
+
+        analytics.Track("app_open");
+        reversed = true;
+        analytics.Track("game_end");
+        await analytics.FlushAsync();
+
+        Assert.AreEqual(1, collector.Bodies.Count);
+    }
+
+    [TestMethod]
     public async Task NoContextSendsNoContext()
     {
         var collector = new FakeCollector();
@@ -271,8 +289,8 @@ public class TimeZoneTests
 
     sealed class Identity : IInstallContext
     {
-        public string GetInstallId() => InstallId;
-        public Device GetDevice() => new() { Country = "FR" };
+        public string? InstallId => TimeZoneTests.InstallId;
+        public string? Country => "FR";
         public bool IsOptedOut { get; set; }
     }
 

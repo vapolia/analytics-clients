@@ -5,7 +5,7 @@ namespace Vapolia.Analytics.Client;
 /// build come from the build token, and everything else was an installation fingerprint the
 /// collector no longer stores. What is true of the installation belongs in the batch context.
 /// </summary>
-public sealed record Device
+sealed record Device
 {
     /// <summary>ISO 3166-1 alpha-2, from the device locale — never from the request IP.</summary>
     public string? Country { get; init; }

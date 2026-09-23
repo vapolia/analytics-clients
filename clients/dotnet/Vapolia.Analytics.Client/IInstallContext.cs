@@ -6,17 +6,17 @@ namespace Vapolia.Analytics.Client;
 public interface IInstallContext
 {
     /// <summary>
-    /// The current installation id, or null when there is none and none may be created
-    /// TODO: + Use a getter.
+    /// The current installation id, or null when there is none and none may be created. Reading it
+    /// creates the id when there is none yet and the person has not opposed.
     /// </summary>
-    string? GetInstallId();
+    string? InstallId { get; }
 
     /// <summary>
-    /// The device context for the current caller
-    /// TODO: simplify so Device can stay internal. + Use a getter.
+    /// ISO 3166-1 alpha-2 country of the current caller, from the device region setting or the browser
+    /// language, never from the IP. Null when unknown.
     /// </summary>
-    Device GetDevice();
- 
+    string? Country { get; }
+
     /// <summary>
     /// Whether this installation, or this visitor, has opposed the measurement
     /// </summary>

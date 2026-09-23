@@ -106,8 +106,6 @@ static class Preferences
 /// </summary>
 static class DeviceProbe
 {
-    public static Device Detect() => new() { Country = CurrentRegion() };
-
     /// <summary>
     /// The device locale as a BCP-47 tag, built from the UI language and the region setting rather
     /// than from the culture alone: a phone set to French in Belgium is <c>fr-BE</c>, where the
@@ -134,7 +132,7 @@ static class DeviceProbe
     /// reading the culture would call it FR. The culture is only the fallback, for the platforms that
     /// leave the region unset.
     /// </summary>
-    static string? CurrentRegion()
+    public static string? CurrentRegion()
     {
         try
         {

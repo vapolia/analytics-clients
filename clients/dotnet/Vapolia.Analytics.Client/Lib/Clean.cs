@@ -35,8 +35,12 @@ static class Clean
         if (value.IsEmpty || maxLength <= 0) 
             return ReadOnlySpan<char>.Empty;
 
-        if (value.Length > maxLength) 
-            value = value[..maxLength];
+        if (value.Length > maxLength)
+        {
+            // Never half an emoji: a lone surrogate reaches the collector as U+FFFD.
+            var cut = char.IsHighSurrogate(value[maxLength - 1]) ? maxLength - 1 : maxLength;
+            value = value[..cut];
+        }
         
         var index = value.IndexOfAny(ControlChars);
         if (index < 0) 
@@ -77,19 +81,23 @@ static class Clean
         return parsed.ToString("D");
     }
 
-    /// <summary>Scalars only, capped in count and in length.</summary>
+    /// <summary>Scalars only, capped in count and in length. Keys are cleaned like the values.</summary>
     public static Dictionary<string, PropValue>? Props(IReadOnlyDictionary<string, object?>? props, int maxKeys = MaxPropsPerEvent)
     {
         if (props is null || props.Count == 0)
             return null;
 
         var kept = new Dictionary<string, PropValue>(StringComparer.Ordinal);
-        foreach (var key in props.Keys)
+        foreach (var (rawKey, value) in props)
         {
             if (kept.Count == maxKeys)
                 break;
 
-            switch (props[key])
+            var key = Text(rawKey, MaxValueLength).ToString();
+            if (key.Length == 0)
+                continue;
+
+            switch (value)
             {
                 case string s when Text(s, MaxValueLength) is { IsEmpty: false } cleaned:
                     kept[key] = PropValue.From(cleaned.ToString());

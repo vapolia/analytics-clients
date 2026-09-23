@@ -2,7 +2,8 @@ namespace Vapolia.Analytics.Client;
 
 /// <summary>
 /// When the app leaves the foreground and when it comes back, straight from the platform: MAUI's own
-/// lifecycle events would pin this package to MAUI, which it deliberately is not.
+/// lifecycle events would pin this package to MAUI, which it deliberately is not. Subscribes once per
+/// process, later calls are ignored.
 ///
 /// Backgrounding is the only moment iOS guarantees the process still runs, so it is where the queue
 /// has to leave; coming back is where <c>app_open</c> belongs.
@@ -57,7 +58,7 @@ static class AppLifecycle
     public static void Subscribe(Action onForeground, Action onBackground)
     {
         if (enteredBackground is not null)
-            throw new ArgumentException("AppLifecycle.Subscribe should not be called more than once", nameof(onForeground));
+            return;
 
         var center = Foundation.NSNotificationCenter.DefaultCenter;
         enteredBackground = center.AddObserver(UIKit.UIApplication.DidEnterBackgroundNotification, _ => onBackground());

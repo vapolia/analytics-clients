@@ -168,7 +168,8 @@ It is null for a loss with no exception behind it like a 4xx or a saturated wind
 
 ## Web: what is stored in the browser
 
-This only holds for server-rendered Blazor.
+The web client supports server-rendered requests only: static server rendering, Razor Pages, MVC and minimal APIs.
+Interactive Blazor components have no `HttpContext`: `Track` records nothing there, `IsOptedOut` cannot be set, and the client logs a warning once.
 
 The events for a website are emitted from the server, during the render of a server-rendered Blazor component.
 No client side script is added to the webpage.
@@ -181,12 +182,25 @@ Two consequences:
 | **Country** | Automatically extracted from `Accept-Language`, never from IP geolocation. |
 | **Opposition** | A second cookie, `_vau_off`: `1` opposed, `0` accepted, absent unanswered. Refreshed on each visit. |
 
-Right of opposition: Inject `IInstallContext` and set IsOptedOut to true.
+Right of opposition: inject `IInstallContext` and set `IsOptedOut` from a server-rendered form post. The events of that visitor still in the queue are discarded.
 
-```csharp
-@inject IInstallContext OptOut
+```razor
+@inject IInstallContext Install
 
-<input type="checkbox" checked="@(!OptOut.IsOptedOut)" @onchange="e => OptOut.IsOptedOut = !(bool)e.Value!" />
+<form method="post" @formname="analytics-opt-out" @onsubmit="Save">
+    <AntiforgeryToken />
+    <label>
+        <input type="checkbox" name="Measured" value="true" checked="@(!Install.IsOptedOut)" />
+        Measure my visits
+    </label>
+    <button type="submit">Save</button>
+</form>
+
+@code {
+    [SupplyParameterFromForm] public bool Measured { get; set; }
+
+    void Save() => Install.IsOptedOut = !Measured;
+}
 ```
 
 One site serves every country at once, so the regime is decided per visitor, from the BCP-47 tag read from `Accept-Language`.
@@ -263,7 +277,7 @@ The client also does two things on its own:
 |---|---|
 | `MobileAnalytics.Start/Current/FlushAsync/StopAsync` | The entry point for an app without a container. |
 | `MobileInstallIdentityProvider.Seed(InstallSeed)` | Adopts an existing installation, once. |
-| `MobileInstallIdentityProvider.Update(d => …)` | Corrects the detected country, for an app that reads it better than the region setting. |
+| `MobileInstallIdentityProvider.Country` | The detected country. Set it to correct the region setting with a country the app reads better. |
 | `MobileInstallIdentityProvider.IsFirstRun` | What decides your own `first_open`. |
 
 

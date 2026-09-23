@@ -11,7 +11,7 @@ namespace Vapolia.Analytics.Client;
 /// </summary>
 sealed class Sender : IAsyncDisposable
 {
-    readonly record struct Command(Pending? Item, TaskCompletionSource? Ack, bool Persist);
+    readonly record struct Command(Pending? Item, TaskCompletionSource? Ack, bool Persist, string? PurgeInstallId = null);
 
     readonly AnalyticsOptions options;
     readonly IPublishHelper publishHelper;
@@ -88,6 +88,23 @@ sealed class Sender : IAsyncDisposable
         await ack.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Forgets every queued, retained and spooled event of <paramref name="installId"/>: what an opposition
+    /// asks for. Null forgets them all. Events already in flight still leave.
+    /// </summary>
+    public void Purge(string? installId = null)
+    {
+        var command = new Command(null, null, false, installId ?? AllInstallIds);
+        if (channel.Writer.TryWrite(command))
+            return;
+
+        // A full queue waits for room rather than skipping the purge.
+        _ = channel.Writer.WriteAsync(command).AsTask().ContinueWith(
+            static t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously);
+    }
+
+    const string AllInstallIds = "*";
+
     async Task RunAsync()
     {
         var buffers = new Dictionary<BatchKey, List<Event>>();
@@ -135,6 +152,12 @@ sealed class Sender : IAsyncDisposable
                         continue;
                     }
 
+                    if (command.PurgeInstallId is { } purged)
+                    {
+                        PurgeBuffers(buffers, purged);
+                        continue;
+                    }
+
                     await FlushAllAsync(buffers).ConfigureAwait(false);
                     if (command.Persist)
                         Persist(buffers);
@@ -146,6 +169,10 @@ sealed class Sender : IAsyncDisposable
         {
             // Stopping.
         }
+        catch (Exception e)
+        {
+            logger.LogError(e, "analytics: the send loop stopped, nothing will be sent until the app restarts");
+        }
         finally
         {
             // Drain what Track already accepted, then write down what could not leave.
@@ -153,6 +180,8 @@ sealed class Sender : IAsyncDisposable
             {
                 if (command.Item is { } pending)
                     Buffer(buffers, pending);
+                else if (command.PurgeInstallId is { } purged)
+                    PurgeBuffers(buffers, purged);
                 else
                     command.Ack?.TrySetResult();
             }
@@ -179,6 +208,17 @@ sealed class Sender : IAsyncDisposable
             buffers[pending.Key] = events = [];
 
         events.Add(pending.Event);
+    }
+
+    void PurgeBuffers(Dictionary<BatchKey, List<Event>> buffers, string installId)
+    {
+        foreach (var key in buffers.Keys.Where(k => installId == AllInstallIds || k.InstallId == installId).ToList())
+        {
+            buffers.Remove(key, out var events);
+            Drop(events!.Count);
+        }
+
+        Persist(buffers);
     }
 
     async Task FlushAllAsync(Dictionary<BatchKey, List<Event>> buffers)

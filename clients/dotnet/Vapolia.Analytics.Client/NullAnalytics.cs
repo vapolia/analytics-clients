@@ -4,8 +4,7 @@ namespace Vapolia.Analytics.Client;
 /// A client that measures nothing: what <see cref="AnalyticsOptions.IsDebugBuild"/> set to true
 /// registers, and what <c>MobileAnalytics.Current</c> answers before the real one is started.
 ///
-/// It exists so a DEBUG build, or a build with no endpoint configured, needs no <c>#if</c> and no
-/// second implementation at the call sites.
+/// It exists so a DEBUG build needs no <c>#if</c> and no second implementation at the call sites.
 /// </summary>
 public sealed class NullAnalytics : IAnalytics, IInstallContext
 {
@@ -33,8 +32,8 @@ public sealed class NullAnalytics : IAnalytics, IInstallContext
     public bool IsOptedOut { get; set; }
 
     /// <inheritdoc/>
-    public string? GetInstallId() => null;
+    public string? InstallId => null;
 
     /// <inheritdoc/>
-    public Device GetDevice() => new();
+    public string? Country => null;
 }

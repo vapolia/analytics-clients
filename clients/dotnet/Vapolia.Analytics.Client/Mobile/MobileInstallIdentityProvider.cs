@@ -17,7 +17,8 @@ public sealed class MobileInstallIdentityProvider : IInstallContext
 
     readonly AnalyticsOptions options;
     readonly Lock gate = new();
-    Device? detected;
+    string? country;
+    bool countryDetected;
 
     /// <summary>Reads and renews the id according to <see cref="AnalyticsAdvancedOptions.InstallIdLifetime"/>.</summary>
     /// <param name="options">The same options the sender was given.</param>
@@ -29,7 +30,7 @@ public sealed class MobileInstallIdentityProvider : IInstallContext
     ///
     /// Before any answer it reads <see cref="AnalyticsOptions.RequiresPriorConsent"/>, or the regime
     /// of the device locale when that is null. Nothing is written then: an unanswered question is not
-    /// a refusal, and the id is minted by <see cref="GetInstallId"/>, which an opted-out client never
+    /// a refusal, and the id is minted by <see cref="InstallId"/>, which an opted-out client never
     /// reaches.
     /// </summary>
     public bool IsOptedOut
@@ -52,43 +53,52 @@ public sealed class MobileInstallIdentityProvider : IInstallContext
                     Preferences.Remove(KeyFirstSeen);
                 }
             }
+
+            if (value)
+                OptedOut?.Invoke();
         }
     }
+
+    /// <summary>Raised when the person opposes, so the sender forgets what it still holds.</summary>
+    internal Action? OptedOut { get; set; }
 
     /// <summary>
     /// The current id, reissued when the old one reached its ceiling. Null when opted out, which is
     /// what stops the tracking.
     /// </summary>
-    public string? GetInstallId()
+    public string? InstallId
     {
-        if (IsOptedOut)
-            return null;
-
-        lock (gate)
+        get
         {
-            SeedIfEmpty();
+            if (IsOptedOut)
+                return null;
 
-            var now = DateTimeOffset.UtcNow;
-            var stored = Clean.InstallId(Preferences.Get(KeyId));
-            var issuedAt = ReadTime(KeyIssuedAt);
+            lock (gate)
+            {
+                SeedIfEmpty();
 
-            // A device clock moved backwards would otherwise freeze the id: reissue rather than extend.
-            var expired = issuedAt is null
-                          || now - issuedAt >= options.AdvancedOptions.InstallIdLifetime
-                          || issuedAt > now.AddDays(1);
+                var now = DateTimeOffset.UtcNow;
+                var stored = Clean.InstallId(Preferences.Get(KeyId));
+                var issuedAt = ReadTime(KeyIssuedAt);
 
-            if (stored is not null && !expired)
-                return stored;
+                // A device clock moved backwards would otherwise freeze the id: reissue rather than extend.
+                var expired = issuedAt is null
+                              || now - issuedAt >= options.AdvancedOptions.InstallIdLifetime
+                              || issuedAt > now.AddDays(1);
 
-            var issued = Guid.NewGuid().ToString("D");
-            Preferences.Set(KeyId, issued);
-            WriteTime(KeyIssuedAt, now);
-            // Deliberately not touched by a renewal: an installation that has run for thirteen months
-            // is not a new one, and an age bucket reset at every rotation would designate nobody.
-            if (ReadTime(KeyFirstSeen) is null)
-                WriteTime(KeyFirstSeen, now);
+                if (stored is not null && !expired)
+                    return stored;
 
-            return issued;
+                var issued = Guid.NewGuid().ToString("D");
+                Preferences.Set(KeyId, issued);
+                WriteTime(KeyIssuedAt, now);
+                // Deliberately not touched by a renewal: an installation that has run for thirteen months
+                // is not a new one, and an age bucket reset at every rotation would designate nobody.
+                if (ReadTime(KeyFirstSeen) is null)
+                    WriteTime(KeyFirstSeen, now);
+
+                return issued;
+            }
         }
     }
 
@@ -133,14 +143,33 @@ public sealed class MobileInstallIdentityProvider : IInstallContext
     }
 
     /// <summary>
-    /// What the device reports about itself: its region setting. Detected once — it does not change
-    /// while the process runs — and never completed with anything about the app: that is the batch
-    /// context.
+    /// The device's region setting, detected once: it does not change while the process runs. Set it to
+    /// correct the detection with a country the app reads better. Not for anything about the app
+    /// itself, which belongs in <see cref="IAnalyticsContext"/>.
     /// </summary>
-    public Device GetDevice()
+    public string? Country
     {
-        lock (gate)
-            return detected ??= DeviceProbe.Detect();
+        get
+        {
+            lock (gate)
+            {
+                if (!countryDetected)
+                {
+                    country = DeviceProbe.CurrentRegion();
+                    countryDetected = true;
+                }
+
+                return country;
+            }
+        }
+        set
+        {
+            lock (gate)
+            {
+                country = value;
+                countryDetected = true;
+            }
+        }
     }
 
     /// <summary>
@@ -164,18 +193,6 @@ public sealed class MobileInstallIdentityProvider : IInstallContext
                 return ReadTime(KeyFirstSeen);
             }
         }
-    }
-
-    /// <summary>
-    /// Corrects what the device probe reported — a country an app reads better than the region
-    /// setting. Not for anything about the app itself, which belongs in
-    /// <see cref="IAnalyticsContext"/>.
-    /// </summary>
-    /// <param name="transform">Given the current device, returns the next one.</param>
-    public void Update(Func<Device, Device> transform)
-    {
-        lock (gate)
-            detected = transform(detected ??= DeviceProbe.Detect());
     }
 
     void SeedIfEmpty()

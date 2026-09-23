@@ -14,9 +14,10 @@ public static class AnalyticsServiceCollectionExtensions
     /// </summary>
     /// <remarks>
     /// Registers <see cref="IAnalytics"/>, <see cref="IInstallContext"/>.
-    /// If <see cref="AnalyticsOptions.IsDebugBuild"/> is true or if the source is missing, it registers <see cref="NullAnalytics"/>.
+    /// If <see cref="AnalyticsOptions.IsDebugBuild"/> is true, it registers <see cref="NullAnalytics"/>.
+    /// Otherwise a missing or relative <see cref="AnalyticsOptions.IngestionUrl"/> throws an <see cref="InvalidOperationException"/> when <see cref="IAnalytics"/> is resolved.
     ///
-    /// <see cref="IAnalyticsContext"/> is queried once when posting a batch of events.
+    /// <see cref="IAnalyticsContext"/> is queried on every event.
     /// To use your own HttpClient, set <see cref="AnalyticsAdvancedOptions.CreateHttpClient"/>.
     /// You can hook into analytics lifecycle events by injecting <see cref="IAppLifecycle"/> and/or <see cref="IInstallContext"/>.
     /// </remarks>

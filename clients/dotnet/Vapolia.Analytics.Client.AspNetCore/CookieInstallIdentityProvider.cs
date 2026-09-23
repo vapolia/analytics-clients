@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Vapolia.Analytics.Client;
@@ -30,6 +31,10 @@ public sealed class CookieInstallIdentityProvider(IHttpContextAccessor accessor,
             if (context is null)
                 return Unanswered();
 
+            // An answer given during this request outranks the cookie the request came with.
+            if (context.Items.TryGetValue(AnswerKey, out var answered) && answered is bool answer)
+                return answer;
+
             return context.Request.Cookies[options.WebOptions.OptOutCookieName] switch
             {
                 "1" => true,
@@ -49,8 +54,29 @@ public sealed class CookieInstallIdentityProvider(IHttpContextAccessor accessor,
         set
         {
             var context = accessor.HttpContext;
-            if (context is null || context.Response.HasStarted)
+            if (context is null)
+            {
+                WarnNoHttpContext();
                 return;
+            }
+
+            context.Items[AnswerKey] = value;
+
+            if (value)
+            {
+                var installId = context.Items.TryGetValue(ItemKey, out var cached) && cached is string id
+                    ? id
+                    : Clean.InstallId(context.Request.Cookies[options.WebOptions.CookieName]);
+                context.Items.Remove(ItemKey);
+                if (installId is not null)
+                    Sender?.Invoke()?.Purge(installId);
+            }
+
+            if (context.Response.HasStarted)
+            {
+                Logger?.LogWarning("analytics: the response has started, the opposition cookie cannot be written. Set IsOptedOut from a server-rendered request.");
+                return;
+            }
 
             if (value)
             {
@@ -64,7 +90,6 @@ public sealed class CookieInstallIdentityProvider(IHttpContextAccessor accessor,
                 });
 
                 context.Response.Cookies.Delete(options.WebOptions.CookieName);
-                context.Items.Remove(ItemKey);
                 return;
             }
 
@@ -82,65 +107,63 @@ public sealed class CookieInstallIdentityProvider(IHttpContextAccessor accessor,
 
 
     /// <summary>
-    /// Reads the cookie, creating it when the response has not started yet. Called by the middleware
-    /// on the way in, so a component rendering later always finds one.
+    /// Reads the cookie, creating it when the response has not started yet. Read by the middleware on
+    /// the way in, so a component rendering later always finds one.
     /// </summary>
-    public string? GetInstallId()
+    public string? InstallId
     {
-        var context = accessor.HttpContext;
-        if (context is null)
-            return null;
-
-        // Checked first: an opposed visitor gets no identifier written at all, not one written then
-        // ignored.
-        if (IsOptedOut)
-            return null;
-
-        if (context.Items.TryGetValue(ItemKey, out var cached) && cached is string existing)
-            return existing;
-
-        var fromCookie = Clean.InstallId(context.Request.Cookies[options.WebOptions.CookieName]);
-        if (fromCookie is not null)
+        get
         {
-            context.Items[ItemKey] = fromCookie;
-            return fromCookie;
+            var context = accessor.HttpContext;
+            if (context is null)
+            {
+                WarnNoHttpContext();
+                return null;
+            }
+
+            // Checked first: an opposed visitor gets no identifier written at all, not one written then
+            // ignored.
+            if (IsOptedOut)
+                return null;
+
+            if (context.Items.TryGetValue(ItemKey, out var cached) && cached is string existing)
+                return existing;
+
+            var fromCookie = Clean.InstallId(context.Request.Cookies[options.WebOptions.CookieName]);
+            if (fromCookie is not null)
+            {
+                context.Items[ItemKey] = fromCookie;
+                return fromCookie;
+            }
+
+            // A cookie can only be set before the response starts. After that the visitor is measured on
+            // the next request instead — one missed hit, never a wrong one.
+            if (context.Response.HasStarted)
+                return null;
+
+            var issued = Guid.NewGuid().ToString("D");
+            context.Response.Cookies.Append(options.WebOptions.CookieName, issued, new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,
+                SameSite = SameSiteMode.Lax,
+                IsEssential = true,
+                // Absolute, from this moment. Never extended on a later visit.
+                Expires = DateTimeOffset.UtcNow.Add(options.AdvancedOptions.InstallIdLifetime),
+            });
+
+            context.Items[ItemKey] = issued;
+            return issued;
         }
-
-        // A cookie can only be set before the response starts. After that the visitor is measured on
-        // the next request instead — one missed hit, never a wrong one.
-        if (context.Response.HasStarted)
-            return null;
-
-        var issued = Guid.NewGuid().ToString("D");
-        context.Response.Cookies.Append(options.WebOptions.CookieName, issued, new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = true,
-            SameSite = SameSiteMode.Lax,
-            IsEssential = true,
-            // Absolute, from this moment. Never extended on a later visit.
-            Expires = DateTimeOffset.UtcNow.Add(options.AdvancedOptions.InstallIdLifetime),
-        });
-
-        context.Items[ItemKey] = issued;
-        return issued;
     }
 
     /// <summary>
-    /// The device of a browser, without a single line of script. Nothing about the app itself is here:
-    /// that is the batch context, which an IAnalyticsContext supplies per request.
-    ///
-    /// The country comes from <c>Accept-Language</c>, which is the visitor's own browser setting —
-    /// not a geolocation of the IP, which the collector forbids and never stores. The user agent is
+    /// The visitor's country, from <c>Accept-Language</c>: the browser's own setting, not a
+    /// geolocation of the IP, which the collector forbids and never stores. The user agent is
     /// deliberately not parsed: guessing a device class from it is fingerprinting for a column
     /// nobody reads.
     /// </summary>
-    public Device GetDevice()
-    {
-        var context = accessor.HttpContext;
-
-        return new Device { Country = RegionOf(PreferredLanguage(context)) };
-    }
+    public string? Country => RegionOf(PreferredLanguage(accessor.HttpContext));
 
     static string? PreferredLanguage(HttpContext? context)
     {
@@ -173,5 +196,23 @@ public sealed class CookieInstallIdentityProvider(IHttpContextAccessor accessor,
         }
     }
 
+    /// <summary>
+    /// Interactive Blazor has no HttpContext: nothing is measured and no answer is stored there. Logged
+    /// once per process.
+    /// </summary>
+    void WarnNoHttpContext()
+    {
+        if (Interlocked.Exchange(ref warnedNoHttpContext, 1) == 0)
+            Logger?.LogWarning("analytics: no HttpContext, nothing is measured. Only server-rendered requests are supported, not interactive Blazor components.");
+    }
+
+    static int warnedNoHttpContext;
+
+    internal ILogger? Logger { get; init; }
+
+    /// <summary>The sender to purge on an opposition, null when nothing is measured.</summary>
+    internal Func<Sender?>? Sender { get; init; }
+
     const string ItemKey = "vapolia.analytics.installId";
+    const string AnswerKey = "vapolia.analytics.optedOut";
 }

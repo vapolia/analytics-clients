@@ -190,4 +190,49 @@ public class SenderTests
                 File.Delete(path);
         }
     }
+
+    [TestMethod]
+    public async Task PurgeForgetsQueuedAndRetainedEventsOfOneInstallation()
+    {
+        var collector = new FakeCollector(SendResult.Retry(TimeSpan.Zero, "offline"));
+        await using var sender = new Sender(Options(maxAttempts: 1), collector, null, NullLogger.Instance);
+
+        // One retained after a failed send, one still queued.
+        sender.Track(Item("app_open"));
+        await sender.FlushAsync();
+        sender.Track(Item("game_end"));
+        sender.Track(Item("app_open", installId: OtherInstallId));
+
+        sender.Purge(InstallId);
+        await sender.FlushAsync();
+
+        Assert.AreEqual(2, collector.Bodies.Count);
+        Assert.AreEqual(OtherInstallId, collector.Batches[1].GetProperty("installId").GetString());
+        Assert.AreEqual(2, sender.Stats.Dropped);
+        Assert.AreEqual(1, sender.Stats.Sent);
+    }
+
+    [TestMethod]
+    public async Task PurgeEmptiesTheSpool()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"vapolia-spool-{Guid.NewGuid():N}.json");
+        try
+        {
+            var collector = new FakeCollector(SendResult.Retry(TimeSpan.Zero, "offline"));
+            await using var sender = new Sender(Options(maxAttempts: 1), collector, new(path, 100, null), NullLogger.Instance);
+            sender.Track(Item("game_end"));
+            await sender.FlushAsync(persist: true);
+            Assert.IsTrue(File.Exists(path));
+
+            sender.Purge();
+            await sender.FlushAsync();
+
+            Assert.IsFalse(File.Exists(path), "an opposition must not leave events on disk");
+        }
+        finally
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+    }
 }

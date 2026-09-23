@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -22,8 +23,9 @@ public static class AnalyticsServiceCollectionExtensions
     /// Then inject <see cref="IAnalytics"/> and call <c>Track</c>. The send happens on the server, so
     /// nothing appears in the visitor's network tab — which only holds for server-rendered Blazor.
     ///
-    /// With <see cref="AnalyticsOptions.IsDebugBuild"/> true, or no source, what is registered is
-    /// <see cref="NullAnalytics"/>: the same call sites, nothing collected, no <c>#if</c> here.
+    /// With <see cref="AnalyticsOptions.IsDebugBuild"/> true, what is registered is
+    /// <see cref="NullAnalytics"/>: the same call sites, nothing collected, no <c>#if</c> here. Otherwise a
+    /// missing or relative <see cref="AnalyticsOptions.IngestionUrl"/> fails the options validation.
     /// </summary>
     public static IServiceCollection AddAnalytics(this IServiceCollection services, Action<AnalyticsOptions> configure)
     {
@@ -33,10 +35,16 @@ public static class AnalyticsServiceCollectionExtensions
             // which can still set it back.
             .Configure(o => o.AdvancedOptions.MaxEventsPerWindow = 0)
             .Configure(configure)
-            .Validate(o => o.IsDebugBuild || o.IngestionUrl.IsAbsoluteUri, $"{nameof(AnalyticsOptions)}.{nameof(AnalyticsOptions.IngestionUrl)} is required and must be an absolute URL");
+            .Validate(o => o.IsDebugBuild || o.IngestionUrl is { IsAbsoluteUri: true }, $"{nameof(AnalyticsOptions)}.{nameof(AnalyticsOptions.IngestionUrl)} is required and must be an absolute URL");
 
         services.AddHttpContextAccessor();
-        services.TryAddScoped<CookieInstallIdentityProvider>();
+        services.TryAddScoped(p => new CookieInstallIdentityProvider(
+            p.GetRequiredService<IHttpContextAccessor>(),
+            p.GetRequiredService<IOptions<AnalyticsOptions>>())
+        {
+            Sender = () => Measuring(p) ? p.GetRequiredService<Sender>() : null,
+            Logger = p.GetService<ILogger<CookieInstallIdentityProvider>>(),
+        });
         services.TryAddScoped<IInstallContext>(p => Measuring(p)
             ? p.GetRequiredService<CookieInstallIdentityProvider>()
             : NullAnalytics.Instance);
@@ -82,7 +90,7 @@ public static class AnalyticsServiceCollectionExtensions
     public static IApplicationBuilder UseAnalytics(this IApplicationBuilder app)
         => app.Use(async (context, next) =>
         {
-            context.RequestServices.GetRequiredService<IInstallContext>().GetInstallId();
+            _ = context.RequestServices.GetRequiredService<IInstallContext>().InstallId;
             await next(context);
         });
 
