@@ -79,4 +79,16 @@ final class CleanTests: XCTestCase {
         XCTAssertNil(Device(country: "kr").cleaned(excluding: ["KR"]))
         XCTAssertEqual(Device(country: "KR").cleaned()?.country, "KR")
     }
+
+    func testPropKeysAreCleanedLikeValues() {
+        let kept = Clean.props([
+            String(repeating: "k", count: Limits.maxValueLength + 10): .number(1),
+            " mo\u{0}de ": .string("x"),
+            "   ": .number(2),
+        ])
+
+        XCTAssertEqual(kept.count, 2)
+        XCTAssertNotNil(kept[String(repeating: "k", count: Limits.maxValueLength)])
+        XCTAssertEqual(kept["mode"], .string("x"))
+    }
 }

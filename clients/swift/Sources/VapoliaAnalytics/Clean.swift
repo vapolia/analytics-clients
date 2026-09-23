@@ -62,8 +62,8 @@ enum Clean {
         return allZero ? nil : id
     }
 
-    /// Caps the count and the length of what a call site passed. ``PropValue`` already keeps the
-    /// values to the scalars the collector accepts, so there is nothing to reject by type here.
+    /// Caps the count and the length of what a call site passed, keys included. ``PropValue`` already
+    /// keeps the values to the scalars the collector accepts, so there is nothing to reject by type here.
     static func props(
         _ props: [String: PropValue],
         maxKeys: Int = Limits.maxPropsPerEvent
@@ -75,17 +75,18 @@ enum Clean {
         // identical contexts produce the same key.
         for key in props.keys.sorted() {
             if kept.count == maxKeys { break }
+            guard let cleanedKey = text(key, maxLength: Limits.maxValueLength) else { continue }
 
             switch props[key] {
             case .string(let value):
                 if let cleaned = text(value, maxLength: Limits.maxValueLength) {
-                    kept[key] = .string(cleaned)
+                    kept[cleanedKey] = .string(cleaned)
                 }
             case .number(let value):
                 // NaN and the infinities are not representable in jsonb.
-                if value.isFinite { kept[key] = .number(value) }
+                if value.isFinite { kept[cleanedKey] = .number(value) }
             case .bool(let value):
-                kept[key] = .bool(value)
+                kept[cleanedKey] = .bool(value)
             case nil:
                 break
             }

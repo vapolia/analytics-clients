@@ -83,7 +83,11 @@ object Analytics {
         if (installIdentity.isOptedOut)
             client?.clear(timeoutMs = 0)
 
-        (app as? Application)?.registerActivityLifecycleCallbacks(Lifecycle)
+        // Once per process: stop() keeps the callbacks, and a second registration would count every activity twice.
+        if (!lifecycleRegistered) {
+            (app as? Application)?.registerActivityLifecycleCallbacks(Lifecycle)
+            lifecycleRegistered = true
+        }
     }
 
     /**
@@ -228,6 +232,8 @@ object Analytics {
     }
 
     @Volatile private var flushesOnBackground = true
+
+    private var lifecycleRegistered = false
 
     private val contextEncoder = BatchEncoder()
 

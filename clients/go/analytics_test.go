@@ -429,3 +429,21 @@ func TestACountryItDoesNotKnowIsNotSentAtAll(t *testing.T) {
 		t.Errorf("country should not be in the body: %s", col.bodies()[0])
 	}
 }
+
+func TestCleansPropKeysLikeValues(t *testing.T) {
+	kept := cleanScalars(map[string]any{
+		strings.Repeat("k", MaxValueLength+10): 1,
+		" mo\x00de ":                           "x",
+		"   ":                                  2,
+	}, MaxPropsPerEvent)
+
+	if len(kept) != 2 {
+		t.Fatalf("kept %d keys, want 2: %v", len(kept), kept)
+	}
+	if _, found := kept[strings.Repeat("k", MaxValueLength)]; !found {
+		t.Error("the long key was not cut at MaxValueLength")
+	}
+	if _, found := kept["mode"]; !found {
+		t.Error("the key was not trimmed and stripped of its control character")
+	}
+}

@@ -49,7 +49,7 @@ func cleanProps(props map[string]any) map[string]any {
 }
 
 // cleanScalars serves both an event's props and a batch context: scalars only, capped in count and
-// in length.
+// in length. Keys are cleaned like the values.
 func cleanScalars(props map[string]any, maxKeys int) map[string]any {
 	if len(props) == 0 {
 		return nil
@@ -61,7 +61,13 @@ func cleanScalars(props map[string]any, maxKeys int) map[string]any {
 			break
 		}
 
-		switch v := props[key].(type) {
+		value := props[key]
+		key := text(key, MaxValueLength)
+		if key == "" {
+			continue
+		}
+
+		switch v := value.(type) {
 		case string:
 			if s := text(v, MaxValueLength); s != "" {
 				kept[key] = s

@@ -19,7 +19,9 @@ internal object Clean {
         if (trimmed.isEmpty())
             return null
 
-        val capped = if (trimmed.length > maxLength) trimmed.substring(0, maxLength) else trimmed
+        // Never half an emoji: a lone surrogate reaches the collector as U+FFFD.
+        val cut = if (trimmed.length > maxLength && trimmed[maxLength - 1].isHighSurrogate()) maxLength - 1 else maxLength
+        val capped = if (trimmed.length > maxLength) trimmed.substring(0, cut) else trimmed
         val cleaned = capped.filter { !it.isISOControl() }.trim()
         return cleaned.ifEmpty { null }
     }
@@ -55,7 +57,7 @@ internal object Clean {
         return if (allZero) null else id
     }
 
-    /** Scalars only, capped in count and in length. */
+    /** Scalars only, capped in count and in length. Keys are cleaned like the values. */
     fun props(props: Map<String, Any?>?, maxKeys: Int = MAX_PROPS_PER_EVENT): Map<String, Any> {
         if (props.isNullOrEmpty())
             return emptyMap()
@@ -67,11 +69,13 @@ internal object Clean {
             if (kept.size == maxKeys)
                 break
 
-            when (val value = props[key]) {
-                is String -> text(value, MAX_VALUE_LENGTH)?.let { kept[key] = it }
-                is Boolean -> kept[key] = value
+            val value = props[key]
+            val cleanedKey = text(key, MAX_VALUE_LENGTH) ?: continue
+            when (value) {
+                is String -> text(value, MAX_VALUE_LENGTH)?.let { kept[cleanedKey] = it }
+                is Boolean -> kept[cleanedKey] = value
                 // NaN and the infinities are not representable in jsonb.
-                is Number -> value.toDouble().takeIf { it.isFinite() }?.let { kept[key] = it }
+                is Number -> value.toDouble().takeIf { it.isFinite() }?.let { kept[cleanedKey] = it }
             }
         }
 
