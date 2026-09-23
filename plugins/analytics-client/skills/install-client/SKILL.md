@@ -132,6 +132,9 @@ BCP-47 tag — `localeRequiresPriorConsent(locale)`, or
 `PriorConsentCountries.LocaleRequiresPriorConsent` in .NET. The list is only as current as the version
 installed.
 
+**That default must not be taken as a legal basis: the choice stays with the app, and so does the
+liability for it.**
+
 Two cases the mapping cannot settle on its own:
 
 - **A tag carrying no region**, `fr` or an unreadable locale, takes regime 2.
@@ -195,7 +198,7 @@ BUILD_TOKEN=$(curl -sf -X POST https://<base>/tokens/<source>/build -H "Authoriz
   -H 'Content-Type: application/json' -d "{\"os\":\"android\",\"build\":\"$BUILD_NUMBER\"}" | jq -r .token)
 ```
 
-Pass it to the client as `token` (Kotlin `AnalyticsConfig`, Swift `AnalyticsConfig`, JS options) or
+Pass it to the client as `token` (Kotlin `AnalyticsOptions`, Swift `AnalyticsOptions`, JS options) or
 `Token` (.NET), through the build system: a BuildConfig field, an Info.plist key, `app.config.ts`
 extra, an MSBuild property. `os` and `build` must be those of the binary. A website or a server sends
 no build token.
