@@ -17,7 +17,8 @@
 
   <PropertyGroup>
     <PackageId>Vapolia.Analytics.Client.AspNetCore</PackageId>
-    <Version>1.0.0</Version>
+    <!-- Version is set by the CI -->
+    <Version>0.0.1</Version>
     <Authors>Vapolia</Authors>
     <Description>Blazor and ASP.NET Core side of the Vapolia audience-measurement client: server-side emission, first-party cookie identity, no script in the page.</Description>
     <PackageTags>analytics;privacy;blazor;aspnetcore</PackageTags>

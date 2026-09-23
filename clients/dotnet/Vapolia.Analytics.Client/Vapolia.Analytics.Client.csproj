@@ -21,7 +21,8 @@
 
   <PropertyGroup>
     <PackageId>Vapolia.Analytics.Client</PackageId>
-    <Version>1.0.0</Version>
+    <!-- Version is set by the CI -->
+    <Version>0.0.1</Version>
     <Authors>Vapolia</Authors>
     <Description>Client for the Vapolia audience-measurement collector: MAUI, Android, iOS and Windows apps. For Blazor and ASP.NET Core, add Vapolia.Analytics.Client.AspNetCore.</Description>
     <PackageTags>analytics;privacy;blazor;maui</PackageTags>
