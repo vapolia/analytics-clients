@@ -75,7 +75,9 @@ jobs:
           echo "publishing $version"
           echo "VERSION=$version" >> "$GITHUB_ENV"
 
-      - run: dotnet workload install android ios maccatalyst --skip-sign-check
+      # Only this project multi-targets android/ios/maccatalyst, and restoring it evaluates every
+      # entry, so its own TFMs name the workloads to install.
+      - run: dotnet workload restore $CLIENT
 
       # A version is published once and cannot be taken back, so the tests run here too.
       - name: Test
