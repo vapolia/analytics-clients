@@ -35,7 +35,7 @@ export class Identity {
     private readonly idLifetimeMs: number = DEFAULT_LIFETIME_MS,
     private readonly refusalLifetimeMs: number = DEFAULT_LIFETIME_MS,
     private readonly seedInstallId?: () => InstallSeed | undefined,
-    private readonly defaultOptedOut: boolean = false
+    private readonly requiresPriorConsent: boolean = false
   ) {}
 
   /** Reads storage once, rotating the id if it reached its ceiling. */
@@ -54,10 +54,10 @@ export class Identity {
     this.loaded = true;
     this.firstOpenSent = firstOpen === 'true';
 
-    // Before any answer, `defaultOptedOut` decides — what a country requiring prior consent sets.
-    // Nothing is written and no id is minted: an unanswered question is not a refusal.
+    // Before any answer, `requiresPriorConsent` decides. Nothing is written and no id is minted:
+    // an unanswered question is not a refusal.
     if (optedOut === null) {
-      this.optedOut = this.defaultOptedOut;
+      this.optedOut = this.requiresPriorConsent;
       if (this.optedOut) return;
     }
 

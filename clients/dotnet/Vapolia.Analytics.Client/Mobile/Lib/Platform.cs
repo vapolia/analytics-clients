@@ -109,6 +109,27 @@ static class DeviceProbe
     public static Device Detect() => new() { Country = CurrentRegion() };
 
     /// <summary>
+    /// The device locale as a BCP-47 tag, built from the UI language and the region setting rather
+    /// than from the culture alone: a phone set to French in Belgium is <c>fr-BE</c>, where the
+    /// culture would say <c>fr-FR</c>. The language alone when the region is unreadable.
+    /// </summary>
+    public static string? CurrentLocale()
+    {
+        var language = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+        if (string.IsNullOrEmpty(language) || language == "iv")
+            language = null;
+
+        var region = CurrentRegion();
+        return (language, region) switch
+        {
+            (null, null) => null,
+            (null, not null) => $"und-{region}",
+            (not null, null) => language,
+            _ => $"{language}-{region}",
+        };
+    }
+
+    /// <summary>
     /// The device's region setting, not its language: a phone set to French in Belgium is BE, and
     /// reading the culture would call it FR. The culture is only the fallback, for the platforms that
     /// leave the region unset.

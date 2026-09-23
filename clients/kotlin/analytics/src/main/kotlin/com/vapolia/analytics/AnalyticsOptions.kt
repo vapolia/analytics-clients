@@ -44,15 +44,20 @@ data class AnalyticsOptions(
      */
     val seedInstallId: (() -> InstallSeed?)? = null,
 
-    /** Toggles collection of analytics. False makes [Analytics.start] a no-op. */
-    val enabled: Boolean = true,
+    /**
+     * True measures nothing at all: [Analytics.start] is a no-op, and nothing restarts the client
+     * before the process does. Set it from the build configuration. The person's own switch is
+     * [Analytics.isOptedOut], which takes effect at once and either way.
+     */
+    val isDebugBuild: Boolean = false,
 
     /**
-     * What [Analytics.optedOut] answers while the person has not answered. True is how a country
-     * that requires prior consent is expressed: nothing is sent and no installation id is written
-     * until the welcome popup sets [Analytics.optedOut] to false.
+     * What [Analytics.isOptedOut] answers while the person has not answered. True sends nothing and
+     * writes no installation id until the welcome popup sets [Analytics.isOptedOut] to false.
+     *
+     * Null reads the device locale and answers from [localeRequiresPriorConsent].
      */
-    val defaultOptedOut: Boolean = false,
+    val requiresPriorConsent: Boolean? = null,
 
     /**
      * ISO 3166-1 alpha-2 countries excluded from the collection. Should be a copy of the exclusion
@@ -135,7 +140,7 @@ data class AnalyticsAppOptions(
      * Whether the client flushes and spools when the app goes to the background — the last moment
      * the process is guaranteed to run.
      */
-    val autoFlushOnBackground: Boolean = true,
+    val flushesOnBackground: Boolean = true,
 )
 
 /** 13 months is the legal ceiling, with no extension. The margin absorbs clock drift. */

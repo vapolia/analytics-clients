@@ -105,60 +105,63 @@ Storing an identifier on a device is governed one country at a time, and what a 
 falls into four regimes. [OBLIGATIONS.md](https://github.com/vapolia/analytics-clients/blob/main/clients/OBLIGATIONS.md) holds the four popups
 and the reasoning; what follows is how the app picks between them.
 
-**The detected region picks the popup, at runtime.** Read the device region setting — the same value
-the client sends as `country` — map it to a regime, and show the matching popup. Nothing is hardcoded
-to one country and nothing asks the person where they are.
+**The detected locale picks the popup, at runtime.** Read the device locale as a BCP-47 tag, map it to
+a regime, and show the matching popup. Nothing is hardcoded to one country and nothing asks the person
+where they are. The client reads the same tag for `requiresPriorConsent`.
 
-| Platform | Region setting |
+| Platform | Device locale |
 |---|---|
-| Android | `Locale.getDefault().country` |
-| iOS | `Locale.current.region?.identifier` |
-| Expo | `expo-localization`, `getLocales()[0].regionCode` |
-| .NET | `RegionInfo.CurrentRegion.TwoLetterISORegionName` |
-| Website | The browser locale. Never the IP address. |
+| Android | `Locale.getDefault().toLanguageTag()` |
+| iOS | `Locale.current.language.languageCode` and `Locale.current.region` |
+| Expo | `expo-localization`, `getLocales()[0].languageTag` |
+| .NET | `CultureInfo.CurrentUICulture` and `RegionInfo.CurrentRegion` |
+| Website | `Accept-Language`. Never the IP address. |
 
 | Regime | Countries | Popup | Client |
 |---|---|---|---|
 | 1. Exempt | `FR` `IT` `ES` `NL` | Terms, one button | Start normally |
-| 2. Consent | The rest of the EEA, `GB`, Quebec | Terms, plus a question with `REFUSE` and `ACCEPT` of equal prominence | `defaultOptedOut = true`, flipped by the answer |
+| 2. Consent | The rest of the EEA, `GB`, Quebec | Terms, plus a question with `REFUSE` and `ACCEPT` of equal prominence | `requiresPriorConsent` resolves to true, flipped by the answer |
 | 3. Notice | `US` `CA` `BR` `CH` `JP` `AU`, most of the rest of the world | The popup of regime 1 | Start normally |
 | 4. Not measured | `KR` | No question: it is never measured | `KR` in `excludedCountries` |
 
 Regime 2 in full: `AT` `BE` `BG` `HR` `CY` `CZ` `DK` `EE` `FI` `DE` `GR` `HU` `IE` `IS` `LI` `LT`
 `LU` `LV` `MT` `NO` `PL` `PT` `RO` `SE` `SI` `SK` `GB`.
 
+Every client answers this itself while `requiresPriorConsent` is null, from the device locale as a
+BCP-47 tag — `localeRequiresPriorConsent(locale)`, or
+`PriorConsentCountries.LocaleRequiresPriorConsent` in .NET. The list is only as current as the version
+installed.
+
 Two cases the mapping cannot settle on its own:
 
-- **An unreadable or unknown region** takes regime 2. It is the only default that is right in every
-  country.
+- **A tag carrying no region**, `fr` or an unreadable locale, takes regime 2.
 - **Quebec** is regime 2 while the rest of Canada is regime 3, and the region setting says `CA` for
-  both. An app with no other signal treats all of `CA` as regime 2.
+  both. `fr-CA` takes regime 2 and `en-CA` regime 3, so a francophone elsewhere in Canada is asked
+  needlessly and an anglophone in Quebec is not asked at all. An app that knows the province settles
+  it by setting `requiresPriorConsent` itself.
 
 Under regime 2 nothing is sent and no identifier is written until the person has answered:
 
 ```kotlin
-// your own lookup: the table above, with regime 2 as the default for an unknown region
-val asksFirst = requiresConsent(Locale.getDefault().country)
-
 Analytics.start(this, AnalyticsOptions(
     ingestionUrl = "https://<base>/<source>",
     excludedCountries = setOf("KR"),
-    defaultOptedOut = asksFirst,
+    requiresPriorConsent = null,   // the table above, read from the device locale
 ))
 
 // the popup's two buttons
-onAccept = { Analytics.optedOut = false }
-onRefuse = { Analytics.optedOut = true }
+onAccept = { Analytics.isOptedOut = false }
+onRefuse = { Analytics.isOptedOut = true }
 ```
 
-`defaultOptedOut` applies only while the person has not answered, so an acceptance survives the next
+`requiresPriorConsent` applies only while the person has not answered, so an acceptance survives the next
 launch. Calling `start()` before the answer writes nothing to the device and sends nothing; the
 acceptance resumes collection with no restart. The same option and the same property exist in Swift,
-JS and .NET, where `Enabled = false` is a build switch rather than the consent gate.
+JS and .NET, where `IsDebugBuild = true` is a build switch rather than the consent gate.
 
-A website serves every regime at once, so it decides per visitor:
-`AnalyticsWebOptions.DefaultOptedOutForCountry` is given the country read from the browser locale, and
-no identity cookie is written until that visitor accepts.
+A website serves every regime at once, so it decides per request, from the `Accept-Language` tag. No
+identity cookie is written until that visitor accepts. `AnalyticsWebOptions.RequiresPriorConsentForLocale`
+is where a site answers that itself.
 
 Both buttons carry the same style, the same size and the same prominence. A refusal placed one level
 below the acceptance is what the CNIL fined Google and Facebook for in 2021.

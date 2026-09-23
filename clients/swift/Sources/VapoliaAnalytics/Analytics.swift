@@ -53,7 +53,7 @@ public final class Analytics: @unchecked Sendable {
             return
         }
 
-        guard options.enabled else {
+        guard !options.isDebugBuild else {
             lock.unlock()
             return
         }
@@ -70,7 +70,8 @@ public final class Analytics: @unchecked Sendable {
         let identity = InstallIdentity(
             idLifetime: options.advanced.installIdLifetime,
             refusalLifetime: options.advanced.optOutLifetime,
-            defaultOptedOut: options.defaultOptedOut
+            requiresPriorConsent: options.requiresPriorConsent
+                ?? localeRequiresPriorConsent(DeviceProbe.currentLocale)
         )
         if let seed = options.seedInstallId?() {
             identity.seed(seed)
@@ -106,7 +107,7 @@ public final class Analytics: @unchecked Sendable {
         Task { await sender.start() }
         // What a previous session spooled must not leave while the person is opted out — or has not
         // yet answered, under a regime that asks first.
-        if identity.optedOut {
+        if identity.isOptedOut {
             Task { await sender.clear() }
         }
         observeAppLifecycle(options.app)
@@ -159,7 +160,7 @@ public final class Analytics: @unchecked Sendable {
             return
         }
 
-        guard !identity.optedOut else { return }
+        guard !identity.isOptedOut else { return }
 
         guard counters.withinRate(
             limit: options.advanced.maxEventsPerWindow,
@@ -219,11 +220,11 @@ public final class Analytics: @unchecked Sendable {
 
     /// The right of opposition. Turning it on stops collection, drops what was queued, and forgets the
     /// installation id, so opting back in cannot resume the same installation.
-    public static var optedOut: Bool {
-        get { shared.currentIdentity?.optedOut ?? false }
+    public static var isOptedOut: Bool {
+        get { shared.currentIdentity?.isOptedOut ?? false }
         set {
             guard let identity = shared.currentIdentity else { return }
-            identity.optedOut = newValue
+            identity.isOptedOut = newValue
             if newValue {
                 let sender = shared.currentSender
                 Task { await sender?.clear() }
@@ -233,7 +234,7 @@ public final class Analytics: @unchecked Sendable {
 
     /// The current installation id, for a support screen. Nil when opted out or not started.
     public static var installId: String? {
-        guard let identity = shared.currentIdentity, !identity.optedOut else { return nil }
+        guard let identity = shared.currentIdentity, !identity.isOptedOut else { return nil }
         return identity.current()
     }
 
@@ -358,7 +359,7 @@ public final class Analytics: @unchecked Sendable {
         ) { [weak self] _ in
             guard let self else { return }
             self.locked { self.backgroundHandler }?()
-            guard app.autoFlushOnBackground else { return }
+            guard app.flushesOnBackground else { return }
             // Delivered on the main queue, but the closure is not main-actor isolated and iOS 15
             // predates `MainActor.assumeIsolated`: hop explicitly rather than assert.
             Task { @MainActor in self.flushInBackground(app.backgroundScope) }

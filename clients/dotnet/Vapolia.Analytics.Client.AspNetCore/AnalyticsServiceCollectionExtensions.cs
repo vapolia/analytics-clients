@@ -22,7 +22,7 @@ public static class AnalyticsServiceCollectionExtensions
     /// Then inject <see cref="IAnalytics"/> and call <c>Track</c>. The send happens on the server, so
     /// nothing appears in the visitor's network tab — which only holds for server-rendered Blazor.
     ///
-    /// With <see cref="AnalyticsOptions.Enabled"/> false, or no source, what is registered is
+    /// With <see cref="AnalyticsOptions.IsDebugBuild"/> true, or no source, what is registered is
     /// <see cref="NullAnalytics"/>: the same call sites, nothing collected, no <c>#if</c> here.
     /// </summary>
     public static IServiceCollection AddAnalytics(this IServiceCollection services, Action<AnalyticsOptions> configure)
@@ -33,11 +33,11 @@ public static class AnalyticsServiceCollectionExtensions
             // which can still set it back.
             .Configure(o => o.AdvancedOptions.MaxEventsPerWindow = 0)
             .Configure(configure)
-            .Validate(o => !o.Enabled || o.IngestionUrl.IsAbsoluteUri, $"{nameof(AnalyticsOptions)}.{nameof(AnalyticsOptions.IngestionUrl)} is required and must be an absolute URL");
+            .Validate(o => o.IsDebugBuild || o.IngestionUrl.IsAbsoluteUri, $"{nameof(AnalyticsOptions)}.{nameof(AnalyticsOptions.IngestionUrl)} is required and must be an absolute URL");
 
         services.AddHttpContextAccessor();
         services.TryAddScoped<CookieInstallIdentityProvider>();
-        services.TryAddScoped<IInstallContext>(p => Enabled(p)
+        services.TryAddScoped<IInstallContext>(p => Measuring(p)
             ? p.GetRequiredService<CookieInstallIdentityProvider>()
             : NullAnalytics.Instance);
 
@@ -61,7 +61,7 @@ public static class AnalyticsServiceCollectionExtensions
                 provider.GetRequiredService<ILogger<IAnalytics>>());
         });
 
-        services.TryAddScoped<IAnalytics>(provider => Enabled(provider)
+        services.TryAddScoped<IAnalytics>(provider => Measuring(provider)
             ? new Analytics(
                 provider.GetRequiredService<Sender>(),
                 provider.GetRequiredService<IInstallContext>(),
@@ -86,8 +86,8 @@ public static class AnalyticsServiceCollectionExtensions
             await next(context);
         });
 
-    static bool Enabled(IServiceProvider provider)
-        => provider.GetRequiredService<IOptions<AnalyticsOptions>>().Value is { Enabled: true, IngestionUrl.IsAbsoluteUri: true };
+    static bool Measuring(IServiceProvider provider)
+        => provider.GetRequiredService<IOptions<AnalyticsOptions>>().Value is { IsDebugBuild: false, IngestionUrl.IsAbsoluteUri: true };
 }
 
 /// <summary>
@@ -102,7 +102,7 @@ sealed class AnalyticsHostedService(IServiceProvider provider, IOptions<Analytic
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        if (!options.Value.Enabled)
+        if (options.Value.IsDebugBuild)
             return;
 
         var sender = provider.GetRequiredService<Sender>();

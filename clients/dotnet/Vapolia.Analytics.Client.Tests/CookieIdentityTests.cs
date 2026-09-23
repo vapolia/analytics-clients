@@ -15,7 +15,9 @@ public class CookieIdentityTests
         bool accepted = false,
         Action<AnalyticsOptions>? configure = null)
     {
-        var options = new AnalyticsOptions { IngestionUrl = new Uri("https://localhost/testsource") };
+        // False, not null: a null RequiresPriorConsent reads the visitor's locale, which is its own
+        // test below.
+        var options = new AnalyticsOptions { IngestionUrl = new Uri("https://localhost/testsource"), RequiresPriorConsent = false };
         configure?.Invoke(options);
         var context = new DefaultHttpContext();
 
@@ -89,7 +91,7 @@ public class CookieIdentityTests
     {
         var (provider, context) = Create(optedOut: true);
 
-        Assert.IsTrue(provider.OptedOut);
+        Assert.IsTrue(provider.IsOptedOut);
         Assert.IsNull(provider.GetInstallId());
         Assert.AreEqual(
             "",
@@ -103,7 +105,7 @@ public class CookieIdentityTests
         var (provider, context) = Create(cookie: InstallId);
         Assert.AreEqual(InstallId, provider.GetInstallId());
 
-        provider.OptedOut = true;
+        provider.IsOptedOut = true;
 
         var setCookie = context.Response.Headers.SetCookie.ToString();
         Assert.IsTrue(setCookie.Contains("_vau_off=1", StringComparison.Ordinal), setCookie);
@@ -116,10 +118,10 @@ public class CookieIdentityTests
     {
         var (provider, context) = Create(optedOut: true);
 
-        provider.OptedOut = false;
+        provider.IsOptedOut = false;
 
         var setCookie = context.Response.Headers.SetCookie.ToString();
-        // "0", not a deletion: the acceptance has to outrank DefaultOptedOut on the next request.
+        // "0", not a deletion: the acceptance has to outrank RequiresPriorConsent on the next request.
         Assert.IsTrue(setCookie.Contains("_vau_off=0", StringComparison.Ordinal), setCookie);
     }
 
@@ -127,9 +129,9 @@ public class CookieIdentityTests
     [TestMethod]
     public void AnUnansweredConsentRegimeGetsNoIdAndNoCookie()
     {
-        var (provider, context) = Create(configure: o => o.DefaultOptedOut = true);
+        var (provider, context) = Create(configure: o => o.RequiresPriorConsent = true);
 
-        Assert.IsTrue(provider.OptedOut);
+        Assert.IsTrue(provider.IsOptedOut);
         Assert.IsNull(provider.GetInstallId());
         Assert.AreEqual("", context.Response.Headers.SetCookie.ToString());
     }
@@ -137,26 +139,48 @@ public class CookieIdentityTests
     [TestMethod]
     public void AnAcceptanceOutranksTheDefault()
     {
-        var (provider, _) = Create(accepted: true, configure: o => o.DefaultOptedOut = true);
+        var (provider, _) = Create(accepted: true, configure: o => o.RequiresPriorConsent = true);
 
-        Assert.IsFalse(provider.OptedOut);
+        Assert.IsFalse(provider.IsOptedOut);
         Assert.IsNotNull(Clean.InstallId(provider.GetInstallId()));
     }
 
     [TestMethod]
-    public void TheRegimeIsReadFromTheVisitorsCountry()
+    public void TheRegimeIsReadFromTheVisitorsLocale()
     {
-        var consent = new HashSet<string> { "DE" };
+        var consent = new HashSet<string> { "de-DE" };
         void Regime(AnalyticsOptions o)
-            => o.WebOptions.DefaultOptedOutForCountry = country => country is not null && consent.Contains(country);
+            => o.WebOptions.RequiresPriorConsentForLocale = locale => locale is not null && consent.Contains(locale);
 
         // One visitor at a time: HttpContextAccessor keeps the current context in an AsyncLocal, so
         // two providers built side by side would both read the last one.
         var (german, _) = Create(acceptLanguage: "de-DE", configure: Regime);
-        Assert.IsTrue(german.OptedOut);
+        Assert.IsTrue(german.IsOptedOut);
 
         var (french, _) = Create(acceptLanguage: "fr-FR", configure: Regime);
-        Assert.IsFalse(french.OptedOut);
+        Assert.IsFalse(french.IsOptedOut);
+    }
+
+    /// Null falls back to the shipped list, on the visitor's own locale.
+    [TestMethod]
+    public void AnUnsetRegimeIsReadFromTheVisitorsLocale()
+    {
+        void Unset(AnalyticsOptions o) => o.RequiresPriorConsent = null;
+
+        var (german, _) = Create(acceptLanguage: "de-DE", configure: Unset);
+        Assert.IsTrue(german.IsOptedOut);
+
+        var (quebecer, _) = Create(acceptLanguage: "fr-CA", configure: Unset);
+        Assert.IsTrue(quebecer.IsOptedOut);
+
+        var (canadian, _) = Create(acceptLanguage: "en-CA", configure: Unset);
+        Assert.IsFalse(canadian.IsOptedOut);
+
+        var (french, _) = Create(acceptLanguage: "fr-FR", configure: Unset);
+        Assert.IsFalse(french.IsOptedOut);
+
+        var (unknown, _) = Create(configure: Unset);
+        Assert.IsTrue(unknown.IsOptedOut, "no Accept-Language is an unreadable region");
     }
 
     [TestMethod]

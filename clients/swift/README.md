@@ -22,7 +22,7 @@ Analytics.onForeground = { Analytics.track("app_open") }
 Analytics.track("game_end", ["result": "win", "moves": 34])
 
 // the opposition switch, in the settings screen
-Analytics.optedOut = true
+Analytics.isOptedOut = true
 ```
 
 The client generates and renews the installation id, fills in the device, sends in the background,
@@ -77,7 +77,7 @@ The queue is sent and written down when the app backgrounds, on its own, inside 
 | `Analytics.start(_ options: AnalyticsOptions)` | Same, with everything else configurable. |
 | `Analytics.track(_:_:)` | `Analytics.track("theme_apply", ["night": true])`. Props are `PropValue` — string, number or bool — and take literals. |
 | `Analytics.flush()` / `await Analytics.flushAndWait()` | Send what is queued, without / with waiting. |
-| `Analytics.optedOut` | The right of opposition. Off by default, or `defaultOptedOut` while the person has not answered; setting it drops the queue and forgets the id. |
+| `Analytics.isOptedOut` | The right of opposition. Before any answer it follows `requiresPriorConsent`; setting it drops the queue and forgets the id. |
 | `Analytics.installId` | The current id, for a support screen. Nil when opted out. |
 | `Analytics.stats` | `accepted` / `rejected` / `dropped` / `sent` / `requests`. |
 | `Analytics.context` | What is true of the installation for a whole batch, read again for every event. Every key must be on the source's `context` whitelist. |
@@ -88,7 +88,7 @@ The queue is sent and written down when the app backgrounds, on its own, inside 
 | `await Analytics.stop()` | One last flush, then the sender stops. Rarely needed. |
 
 `AnalyticsOptions` mirrors the .NET client, which is this repository's reference: `ingestionUrl`
-(required), `token`, `seedInstallId`, `enabled`, `defaultOptedOut`, `excludedCountries`, `context` — and the rest under
+(required), `token`, `seedInstallId`, `isDebugBuild`, `requiresPriorConsent`, `excludedCountries`, `context` — and the rest under
 `advanced` and `app`:
 
 ```swift
@@ -97,7 +97,7 @@ Analytics.start(AnalyticsOptions(
     token: BuildToken.value,
     excludedCountries: ["KR"],
     advanced: .init(queueCapacity: 4_000, logger: PrintLogger()),
-    app: .init(autoFlushOnBackground: true)
+    app: .init(flushesOnBackground: true)
 ))
 ```
 
@@ -106,26 +106,30 @@ the collector's ceiling), `queueCapacity` (4000), `maxAttempts` (3), `requestTim
 `spoolPath` (nil: Caches), `spoolCapacity` (1000, zero disables the spool), `installIdLifetime` and
 `optOutLifetime` (390 days each), `logger` (silent; pass `PrintLogger()` while integrating),
 `onError` (`(Error?, String, Bool)`, called on every loss next to the log).
-`app`: `autoFlushOnBackground` (true), `backgroundScope` (nil: the client's own `beginBackgroundTask`).
+`app`: `flushesOnBackground` (true), `backgroundScope` (nil: the client's own `beginBackgroundTask`).
 
-## A country that asks first
+## requiresPriorConsent and isOptedOut
 
-Where consent must be given before anything is stored, start with `defaultOptedOut = true` and let the
-welcome popup answer. Nothing is sent and no installation id is written until it does; an acceptance
-takes effect at once, with no restart, and outranks the default on the next launch.
+Depending on the country, consent may need to be given before the client starts collecting data.
+This is controlled by the `requiresPriorConsent` option.
+Which countries require this prior consent, and what the popup says, are in
+[OBLIGATIONS.md](https://github.com/vapolia/analytics-clients/blob/main/clients/OBLIGATIONS.md).
+This option is only used while the person has not answered, so an acceptance survives the next launch.
 
+When `requiresPriorConsent` is nil, the client answers with a built-in default, as a convenience.
+**That default must not be taken as a legal basis: the choice stays yours, and so does the liability for it.**
+
+To use your own choice:
 ```swift
 Analytics.start(AnalyticsOptions(
     ingestionUrl: url,
-    defaultOptedOut: requiresConsent(Locale.current.region?.identifier)   // your own lookup
+    requiresPriorConsent: yourRequiresPriorConsent(locale)   // default is localeRequiresPriorConsent()
 ))
 
-onAccept = { Analytics.optedOut = false }
-onRefuse = { Analytics.optedOut = true }
+// the popup's two buttons
+onAccept = { Analytics.isOptedOut = false }
+onRefuse = { Analytics.isOptedOut = true }
 ```
-
-Which countries ask first, and what the popup says, are in
-[OBLIGATIONS.md](https://github.com/vapolia/analytics-clients/blob/main/clients/OBLIGATIONS.md).
 
 ## Failure behaviour
 

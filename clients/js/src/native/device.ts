@@ -14,3 +14,8 @@ export async function detectDevice(): Promise<Device> {
 
   return { country: localization.getLocales()[0]?.regionCode ?? undefined };
 }
+
+/** The device locale as a BCP-47 tag, for the consent regime. Undefined without `expo-localization`. */
+export function currentLocale(): string | undefined {
+  return loadLocalization()?.getLocales()[0]?.languageTag ?? undefined;
+}

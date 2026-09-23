@@ -31,13 +31,16 @@ public struct AnalyticsOptions: Sendable {
     /// migrated off another SDK. Read once, at startup, and only if nothing is stored yet.
     public var seedInstallId: (@Sendable () -> InstallSeed?)?
 
-    /// Toggles collection of analytics. False makes ``Analytics/start(_:)`` a no-op.
-    public var enabled: Bool
+    /// True measures nothing at all: ``Analytics/start(_:)`` is a no-op, and nothing restarts the
+    /// client before the process does. Set it from the build configuration. The person's own switch
+    /// is ``Analytics/isOptedOut``, which takes effect at once and either way.
+    public var isDebugBuild: Bool
 
-    /// What ``Analytics/optedOut`` answers while the person has not answered. True is how a country
-    /// that requires prior consent is expressed: nothing is sent and no installation id is written
-    /// until the welcome popup sets ``Analytics/optedOut`` to false.
-    public var defaultOptedOut: Bool
+    /// What ``Analytics/isOptedOut`` answers while the person has not answered. True sends nothing and
+    /// writes no installation id until the welcome popup sets ``Analytics/isOptedOut`` to false.
+    ///
+    /// Nil reads the device locale and answers from ``localeRequiresPriorConsent(_:)``.
+    public var requiresPriorConsent: Bool?
 
     /// ISO 3166-1 alpha-2 countries excluded from the collection. Should be a copy of the exclusion
     /// list of the collector (the analytics server).
@@ -57,8 +60,8 @@ public struct AnalyticsOptions: Sendable {
         ingestionUrl: URL,
         token: String? = nil,
         seedInstallId: (@Sendable () -> InstallSeed?)? = nil,
-        enabled: Bool = true,
-        defaultOptedOut: Bool = false,
+        isDebugBuild: Bool = false,
+        requiresPriorConsent: Bool? = nil,
         excludedCountries: Set<String> = [],
         context: (@Sendable () -> [String: PropValue]?)? = nil,
         advanced: AnalyticsAdvancedOptions = .init(),
@@ -67,8 +70,8 @@ public struct AnalyticsOptions: Sendable {
         self.ingestionUrl = ingestionUrl
         self.token = token
         self.seedInstallId = seedInstallId
-        self.enabled = enabled
-        self.defaultOptedOut = defaultOptedOut
+        self.isDebugBuild = isDebugBuild
+        self.requiresPriorConsent = requiresPriorConsent
         self.excludedCountries = Set(excludedCountries.map { $0.uppercased() })
         self.context = context
         self.advanced = advanced
@@ -168,17 +171,17 @@ public protocol AnalyticsBackgroundScope: Sendable {
 public struct AnalyticsAppOptions: Sendable {
     /// Whether the client flushes and spools when the app goes to the background — the last moment
     /// iOS guarantees the process runs.
-    public var autoFlushOnBackground: Bool
+    public var flushesOnBackground: Bool
 
     /// A scope that prevents the app from being killed mid-send by the host. Nil uses the client's
     /// own `beginBackgroundTask`.
     public var backgroundScope: (@Sendable (String) async -> (any AnalyticsBackgroundScope)?)?
 
     public init(
-        autoFlushOnBackground: Bool = true,
+        flushesOnBackground: Bool = true,
         backgroundScope: (@Sendable (String) async -> (any AnalyticsBackgroundScope)?)? = nil
     ) {
-        self.autoFlushOnBackground = autoFlushOnBackground
+        self.flushesOnBackground = flushesOnBackground
         self.backgroundScope = backgroundScope
     }
 }

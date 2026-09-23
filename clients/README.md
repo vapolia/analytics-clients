@@ -38,9 +38,10 @@ Clients exist in the following language:
    app. Each client exposes what the app needs for it: a first-run flag, and the lifecycle it already
    watches in order to flush.
 8. **A client sends nothing while opted out, and mints no id.** The refusal is stored on the device.
-   Under a regime that asks before anything may be stored, `defaultOptedOut` is what an unanswered
+   Under a regime that asks before anything may be stored, `requiresPriorConsent` is what an unanswered
    question reads as: nothing is written until the answer, and an acceptance takes effect without a
-   restart. Which countries ask first is in [OBLIGATIONS.md](OBLIGATIONS.md).
+   restart. Which countries ask first is in [OBLIGATIONS.md](OBLIGATIONS.md); left null,
+   `requiresPriorConsent` answers from that list itself, on the device locale.
 9. **Excluded countries are refused client-side too.** The deployment lists them in `excludedCountries`, globally or
    on the source when it needs a list of its own. The app passes whichever applies to its client, which then sends
    nothing from there. The collector enforces it as well. No client hardcodes a country. Which countries, and why, is
@@ -96,12 +97,12 @@ The mobile and js clients write what is unsent to disk, so a restart resumes. Th
 hundred milliseconds after each event, rather than on background alone.
 
 Every client names these the same way:
-`ingestionUrl` (`https://baseUrl/sourceName`), `token`, `enabled`, `defaultOptedOut`,
+`ingestionUrl` (`https://baseUrl/sourceName`), `token`, `isDebugBuild`, `requiresPriorConsent`,
 `excludedCountries`, `context`,
 `seedInstallId`, and — under `advanced` — `flushInterval` (30 s), `maxEventsPerWindow` (30),
 `rateWindow` (60 s), `batchSize` (100), `queueCapacity` (4000), `maxAttempts` (3), `requestTimeout`
 (10 s), `spoolPath`, `spoolCapacity` (1000), `installIdLifetime` and `optOutLifetime` (390 days
-each), `logger`, `onError`. Under `app`: `autoFlushOnBackground`. Each language keeps its own
+each), `logger`, `onError`. Under `app`: `flushesOnBackground`. Each language keeps its own
 spelling for durations: `TimeSpan` in .NET, `TimeInterval` in Swift, a `…Ms` suffix in Kotlin and JS.
 
 Before sending, every client applies the collector's own ceilings: 64 characters per event name,

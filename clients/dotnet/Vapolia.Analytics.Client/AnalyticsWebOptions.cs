@@ -17,10 +17,12 @@ public sealed class AnalyticsWebOptions
     public string OptOutCookieName { get; set; } = "_vau_off";
 
     /// <summary>
-    /// Whether this visitor's country requires consent before anything is stored, given the country
-    /// read from the browser locale — null when it says none. Consulted only while the visitor has
-    /// not answered, and it wins over <see cref="AnalyticsOptions.DefaultOptedOut"/>, which is the
-    /// answer for a site serving one regime.
+    /// Whether this visitor requires consent before anything is stored, given the BCP-47 tag read
+    /// from <c>Accept-Language</c> — null when the header says none. Consulted only while the visitor
+    /// has not answered, and it wins over <see cref="AnalyticsOptions.RequiresPriorConsent"/>.
+    ///
+    /// Leave it unset to take <see cref="PriorConsentCountries.LocaleRequiresPriorConsent"/>, which is
+    /// what a null <see cref="AnalyticsOptions.RequiresPriorConsent"/> falls back to.
     /// </summary>
-    public Func<string?, bool>? DefaultOptedOutForCountry { get; set; }
+    public Func<string?, bool>? RequiresPriorConsentForLocale { get; set; }
 }

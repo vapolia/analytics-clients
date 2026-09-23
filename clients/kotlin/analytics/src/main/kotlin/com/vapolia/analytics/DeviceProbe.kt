@@ -12,4 +12,7 @@ internal object DeviceProbe {
 
     fun detect(@Suppress("UNUSED_PARAMETER") context: Context): Device =
         Device(country = Locale.getDefault().country)
+
+    /** The device locale as a BCP-47 tag, for the consent regime. */
+    fun currentLocale(): String? = Locale.getDefault().toLanguageTag().takeIf { it != "und" }
 }

@@ -9,7 +9,7 @@ public sealed class AnalyticsAppOptions
     /// Whether the client flushes and spools when the app goes to the background — the last moment iOS guarantees the process runs.
     /// Mobile only; a server flushes when the host stops.
     /// </summary>
-    public bool AutoFlushOnBackground { get; set; } = true;
+    public bool FlushesOnBackground { get; set; } = true;
 
     /// <summary>
     /// A scope that prevents the app from being killed mid-send by the host.

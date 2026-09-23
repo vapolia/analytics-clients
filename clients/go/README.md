@@ -50,7 +50,7 @@ oppose, so an opposed installation simply stops calling the RPC.
 | `Stats() Stats` | Accepted / Rejected / Dropped / Sent / Requests counters. |
 
 `Options` mirrors the .NET client, which is this repository's reference: `IngestionUrl`
-(`https://baseUrl/sourceName`, required), `Token`, `Enabled`, `ExcludedCountries`, `Context` — and
+(`https://baseUrl/sourceName`, required), `Token`, `IsDebugBuild`, `ExcludedCountries`, `Context` — and
 the rest under `Advanced`:
 
 ```go

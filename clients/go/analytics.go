@@ -37,9 +37,9 @@ type Options struct {
 	// from the token itself, not from how it arrived, so one field covers both roles.
 	Token string
 
-	// Enabled toggles collection. False makes New return a client that accepts and drops everything.
-	// It is a pointer so the zero Options still means enabled.
-	Enabled *bool
+	// IsDebugBuild set to true measures nothing at all: New returns a client that accepts and drops
+	// everything. Set it from the build configuration.
+	IsDebugBuild bool
 
 	// ExcludedCountries are ISO 3166-1 alpha-2 countries excluded from the collection. Should be a
 	// copy of the exclusion list of the collector.
@@ -185,7 +185,7 @@ func New(opts Options) (*Client, error) {
 	c := &Client{
 		opts:     opts,
 		excluded: excluded,
-		enabled:  opts.Enabled == nil || *opts.Enabled,
+		enabled:  !opts.IsDebugBuild,
 		adv:      adv,
 		endpoint: url,
 		source:   source,

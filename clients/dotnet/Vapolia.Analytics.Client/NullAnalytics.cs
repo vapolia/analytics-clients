@@ -1,7 +1,7 @@
 namespace Vapolia.Analytics.Client;
 
 /// <summary>
-/// A client that measures nothing: what <see cref="AnalyticsOptions.Enabled"/> set to false
+/// A client that measures nothing: what <see cref="AnalyticsOptions.IsDebugBuild"/> set to true
 /// registers, and what <c>MobileAnalytics.Current</c> answers before the real one is started.
 ///
 /// It exists so a DEBUG build, or a build with no endpoint configured, needs no <c>#if</c> and no
@@ -30,7 +30,7 @@ public sealed class NullAnalytics : IAnalytics, IInstallContext
     ///
     /// Kept in memory only — a client that measures nothing has nowhere to write it.
     /// </summary>
-    public bool OptedOut { get; set; }
+    public bool IsOptedOut { get; set; }
 
     /// <inheritdoc/>
     public string? GetInstallId() => null;

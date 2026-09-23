@@ -14,7 +14,7 @@ public static class AnalyticsServiceCollectionExtensions
     /// </summary>
     /// <remarks>
     /// Registers <see cref="IAnalytics"/>, <see cref="IInstallContext"/>.
-    /// If <see cref="AnalyticsOptions.Enabled"/> is false or if the source is missing, it registers <see cref="NullAnalytics"/>.
+    /// If <see cref="AnalyticsOptions.IsDebugBuild"/> is true or if the source is missing, it registers <see cref="NullAnalytics"/>.
     ///
     /// <see cref="IAnalyticsContext"/> is queried once when posting a batch of events.
     /// To use your own HttpClient, set <see cref="AnalyticsAdvancedOptions.CreateHttpClient"/>.

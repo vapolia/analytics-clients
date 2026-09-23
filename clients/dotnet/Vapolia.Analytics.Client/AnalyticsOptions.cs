@@ -21,16 +21,21 @@ public sealed class AnalyticsOptions
     public Func<InstallSeed?>? SeedInstallId { get; set; }
 
     /// <summary>
-    /// Toggles collection of analytics
+    /// True measures nothing at all: the client never starts, and nothing restarts it before the
+    /// process does. Set it from the build configuration. The person's own switch is
+    /// <see cref="IInstallContext.IsOptedOut"/>, which takes effect at once and either way.
     /// </summary>
-    public bool Enabled { get; set; } = true;
+    public bool IsDebugBuild { get; set; }
 
     /// <summary>
-    /// What <see cref="IInstallContext.OptedOut"/> answers while the person has not answered. True is
-    /// how a country that requires prior consent is expressed: nothing is sent and no installation id
-    /// is written until the welcome popup sets <see cref="IInstallContext.OptedOut"/> to false.
+    /// What <see cref="IInstallContext.IsOptedOut"/> answers while the person has not answered. True
+    /// sends nothing and writes no installation id until the welcome popup sets
+    /// <see cref="IInstallContext.IsOptedOut"/> to false.
+    ///
+    /// Null reads the device locale and answers from
+    /// <see cref="PriorConsentCountries.LocaleRequiresPriorConsent"/>.
     /// </summary>
-    public bool DefaultOptedOut { get; set; }
+    public bool? RequiresPriorConsent { get; set; }
 
     /// <summary>
     /// ISO 3166-1 alpha-2 countries excluded from the collection.

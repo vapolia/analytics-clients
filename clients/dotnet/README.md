@@ -1,18 +1,8 @@
 # .NET client
 
-Nugets:
+Nuget Packages:
 - `Vapolia.Analytics.Client` for standalone apps (MAUI, Android, iOS, Windows apps)
 - `Vapolia.Analytics.Client.AspNetCore` for web apps (Blazor and ASP.NET Core)
-
-## Install
-
-```xml
-<!-- Standalone Apps -->
-<PackageReference Include="Vapolia.Analytics.Client" Version="1.0.0" />
-
-<!-- Web Apps (Blazor / ASP.NET Core) -->
-<PackageReference Include="Vapolia.Analytics.Client.AspNetCore" Version="1.0.0" />
-```
 
 ## Summary
 
@@ -71,38 +61,35 @@ lifecycle.Foreground += () => analytics.Track("app_open");
 | Device context | `country` alone, from **`RegionInfo.CurrentRegion`** (the region setting, not the language). The platform and the build come from the build token. |
 | Time zone | Each event carries the device offset in minutes east of UTC (`tz`), read at the instant of the event, apart from its UTC `ts`. |
 
-Turn the background flush off with `AutoFlushOnBackground = false`.
+Turn the background flush off with `FlushesOnBackground = false`.
 
-## A country that asks first
+## What this SDK cannot check for you
 
-Where consent must be given before anything is stored, start with `DefaultOptedOut = true` and let the
-welcome popup answer. Nothing is sent and no installation id is written until it does; an acceptance
-takes effect at once, with no restart, and outranks the default on the next launch.
+- `ExcludedCountries`: pass the list that applies to your app. What is in it is refused here as well as by the collector.
+- The privacy policy, the store declarations, the opposition switch, and the list of excluded countries are the app's obligations — see [OBLIGATIONS.md](https://github.com/vapolia/analytics-clients/blob/main/clients/OBLIGATIONS.md).
 
-```csharp
+## RequiresPriorConsent and IsOptedOut
+
+Depending on the country consent may need to be given before the analytics SDK can start collecting data. 
+This is controlled by the `RequiresPriorConsent` flag.  
+Which countries require this prior consent are in [OBLIGATIONS.md](https://github.com/vapolia/analytics-clients/blob/main/clients/OBLIGATIONS.md).  
+This flag is only used when IsOptedOut is null (ie: the user never chose the consent yet).
+
+When RequiresPriorConsent is null, the SDK answers with a built-in default, as a convenience.
+**That default must not be taken as a legal basis: the choice stays yours, and so does the liability for it.**
+
+To use your own choice:
+```c#
 builder.UseAnalytics(o =>
 {
     o.IngestionUrl = new("https://analytics.example.com/myapp");
-    o.DefaultOptedOut = RequiresConsent(RegionInfo.CurrentRegion.TwoLetterISORegionName);   // your own lookup
+    o.RequiresPriorConsent = YourRequiresPriorConsentFunc(locale); // default is PriorConsentCountries.LocaleRequiresPriorConsent()
 });
 
 // the popup's two buttons, on the injected IInstallContext
-onAccept = () => install.OptedOut = false;
-onRefuse = () => install.OptedOut = true;
+onAccept = () => install.IsOptedOut = false;
+onRefuse = () => install.IsOptedOut = true;
 ```
-
-`Enabled = false` is a different thing: a build switch that registers `NullAnalytics` for the life of
-the process, so it cannot serve as the consent gate.
-
-Which countries ask first, and what the popup says, are in
-[OBLIGATIONS.md](https://github.com/vapolia/analytics-clients/blob/main/clients/OBLIGATIONS.md).
-
-## What this client cannot check for you
-
-- `ExcludedCountries` is empty by default: pass the list that applies to your app. What is in it is
-  refused here as well as by the collector.
-- The privacy policy, the store declarations, the opposition switch and the list of excluded countries
-  are the app's obligations — see [OBLIGATIONS.md](https://github.com/vapolia/analytics-clients/blob/main/clients/OBLIGATIONS.md).
 
 ## Options
 
@@ -110,9 +97,9 @@ Which countries ask first, and what the popup says, are in
 ```c#
 builder.UseAnalytics(o =>
 {
-    //...
 #if DEBUG
-    o.Enabled = false;
+    // definetly disables analytics for the life of the process
+    o.IsDebugBuild = true;
 #endif
 });
 ```
@@ -141,7 +128,7 @@ builder.Services.AddSingleton<IAnalyticsContext, GameAnalyticsContext>();
 Every key must be on the source's `context` whitelist in the collector's configuration - a missing key is dropped in silence. 
 
 ### Migrating from another implementation 
-`SeedInstallId` hands the client the id the app already had when its own store is empty. 
+When the SDK has no id of its own, `SeedInstallId` can give it one it previously had.
 
 ```csharp
 o.SeedInstallId = () => new InstallSeed(
@@ -150,15 +137,12 @@ o.SeedInstallId = () => new InstallSeed(
     DateTimeOffset.FromUnixTimeMilliseconds(Preferences.Get("analytics_first_seen", 0L)));
 ```
 
-It is read only while no id is stored, so leaving the call in place is safe.
-
 ### Use your own HttpClient
 
 ```csharp
 o.CreateHttpClient = () => factory.CreateClient("name-this-client");
 ```
-
-If provided, other http-related options are ignored (like timeout).
+If provided, it takes over all other http-related options (like timeout) which are then ignored.
 
 
 ### Reporting losses somewhere other than the log
@@ -180,7 +164,7 @@ o.OnError = (exception, reason, permanent) =>
 };
 ```
 
-It is null for a loss with no exception behind it — a 4xx, or a saturated window.
+It is null for a loss with no exception behind it like a 4xx or a saturated window.
 
 ## Web: what is stored in the browser
 
@@ -197,28 +181,27 @@ Two consequences:
 | **Country** | Automatically extracted from `Accept-Language`, never from IP geolocation. |
 | **Opposition** | A second cookie, `_vau_off`: `1` opposed, `0` accepted, absent unanswered. Refreshed on each visit. |
 
-Right of opposition: Inject `IInstallContext` and set OptedOut to true.
+Right of opposition: Inject `IInstallContext` and set IsOptedOut to true.
 
 ```csharp
 @inject IInstallContext OptOut
 
-<input type="checkbox" checked="@(!OptOut.OptedOut)" @onchange="e => OptOut.OptedOut = !(bool)e.Value!" />
+<input type="checkbox" checked="@(!OptOut.IsOptedOut)" @onchange="e => OptOut.IsOptedOut = !(bool)e.Value!" />
 ```
 
-One site serves every country at once, so the regime is decided per visitor, from the country read
-from `Accept-Language`:
+One site serves every country at once, so the regime is decided per visitor, from the BCP-47 tag read from `Accept-Language`.
+A null `RequiresPriorConsent` does this on its own; set`RequiresPriorConsentForLocale` to answer it yourself:
 
 ```csharp
 builder.Services.AddAnalytics(o =>
 {
     o.IngestionUrl = new("https://analytics.example.com/myapp");
-    o.WebOptions.DefaultOptedOutForCountry = country => RequiresConsent(country);   // your own lookup
+    o.WebOptions.RequiresPriorConsentForLocale = locale => MyOwnLookup(locale);
 });
 ```
 
-Until that visitor accepts, no identity cookie is written and nothing is sent. Accepting writes
-`_vau_off=0`, which outranks the default on the next request. `DefaultOptedOut` is the same answer
-for a site serving one regime.
+Until that visitor accepts, no identity cookie is written and nothing is sent. 
+Accepting writes `_vau_off=0`, which outranks the default on the next request.
 
 `UseAnalytics()` must run before the response starts — a cookie cannot be set afterwards. 
 If it is too late, the visit is simply not measured.

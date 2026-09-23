@@ -20,5 +20,5 @@ public interface IInstallContext
     /// <summary>
     /// Whether this installation, or this visitor, has opposed the measurement
     /// </summary>
-    bool OptedOut { get; set; }
+    bool IsOptedOut { get; set; }
 }

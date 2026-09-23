@@ -27,16 +27,17 @@ public sealed class MobileInstallIdentityProvider : IInstallContext
     /// The right of opposition. Turning it on forgets the id, so opting back in cannot resume the same
     /// installation.
     ///
-    /// Before any answer it reads <see cref="AnalyticsOptions.DefaultOptedOut"/>, which is what a
-    /// country requiring prior consent sets. Nothing is written then: an unanswered question is not a
-    /// refusal, and the id is minted by <see cref="GetInstallId"/>, which an opted-out client never
+    /// Before any answer it reads <see cref="AnalyticsOptions.RequiresPriorConsent"/>, or the regime
+    /// of the device locale when that is null. Nothing is written then: an unanswered question is not
+    /// a refusal, and the id is minted by <see cref="GetInstallId"/>, which an opted-out client never
     /// reaches.
     /// </summary>
-    public bool OptedOut
+    public bool IsOptedOut
     {
         get => Preferences.Get(KeyOptedOut) switch
         {
-            null => options.DefaultOptedOut,
+            null => options.RequiresPriorConsent
+                    ?? PriorConsentCountries.LocaleRequiresPriorConsent(DeviceProbe.CurrentLocale()),
             var answer => answer == "true",
         };
         set
@@ -60,7 +61,7 @@ public sealed class MobileInstallIdentityProvider : IInstallContext
     /// </summary>
     public string? GetInstallId()
     {
-        if (OptedOut)
+        if (IsOptedOut)
             return null;
 
         lock (gate)
@@ -121,7 +122,7 @@ public sealed class MobileInstallIdentityProvider : IInstallContext
 
         lock (gate)
         {
-            if (OptedOut || Clean.InstallId(Preferences.Get(KeyId)) is not null)
+            if (IsOptedOut || Clean.InstallId(Preferences.Get(KeyId)) is not null)
                 return false;
 
             Preferences.Set(KeyId, id);
@@ -154,7 +155,7 @@ public sealed class MobileInstallIdentityProvider : IInstallContext
     {
         get
         {
-            if (OptedOut)
+            if (IsOptedOut)
                 return null;
 
             lock (gate)

@@ -9,7 +9,7 @@ final class InstallIdentity: @unchecked Sendable {
     private let now: @Sendable () -> Date
     private let idLifetime: TimeInterval
     private let refusalLifetime: TimeInterval
-    private let defaultOptedOut: Bool
+    private let requiresPriorConsent: Bool
     private let lock = NSLock()
 
     init(
@@ -17,13 +17,13 @@ final class InstallIdentity: @unchecked Sendable {
         now: @escaping @Sendable () -> Date = { Date() },
         idLifetime: TimeInterval = InstallIdentity.defaultLifetime,
         refusalLifetime: TimeInterval = InstallIdentity.defaultLifetime,
-        defaultOptedOut: Bool = false
+        requiresPriorConsent: Bool = false
     ) {
         self.defaults = defaults
         self.now = now
         self.idLifetime = idLifetime
         self.refusalLifetime = refusalLifetime
-        self.defaultOptedOut = defaultOptedOut
+        self.requiresPriorConsent = requiresPriorConsent
     }
 
     /// Whether the person has answered the measurement question, either way.
@@ -95,15 +95,15 @@ final class InstallIdentity: @unchecked Sendable {
     /// A refusal is remembered for ``refusalLifetime``, and — unlike the identifier — refreshed on
     /// every read: an opposition must not quietly lapse while the app is still in use.
     ///
-    /// Before any answer it reads `defaultOptedOut`, which is what a country requiring prior consent
-    /// sets. Nothing is written then: an unanswered question is not a refusal, and the id is minted
-    /// by ``current()``, which an opted-out client never calls.
-    var optedOut: Bool {
+    /// Before any answer it reads `requiresPriorConsent`. Nothing is written then: an unanswered
+    /// question is not a refusal, and the id is minted by ``current()``, which an opted-out client
+    /// never calls.
+    var isOptedOut: Bool {
         get {
             lock.lock()
             defer { lock.unlock() }
 
-            guard defaults.object(forKey: Keys.optedOut) != nil else { return defaultOptedOut }
+            guard defaults.object(forKey: Keys.optedOut) != nil else { return requiresPriorConsent }
             guard defaults.bool(forKey: Keys.optedOut) else { return false }
 
             let recordedAt = defaults.object(forKey: Keys.optedOutAt) as? Date ?? now()

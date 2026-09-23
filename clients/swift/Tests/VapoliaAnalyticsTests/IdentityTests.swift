@@ -21,14 +21,14 @@ final class IdentityTests: XCTestCase {
         now: @escaping @Sendable () -> Date,
         idLifetime: TimeInterval = InstallIdentity.defaultLifetime,
         refusalLifetime: TimeInterval = InstallIdentity.defaultLifetime,
-        defaultOptedOut: Bool = false
+        requiresPriorConsent: Bool = false
     ) -> InstallIdentity {
         InstallIdentity(
             defaults: defaults,
             now: now,
             idLifetime: idLifetime,
             refusalLifetime: refusalLifetime,
-            defaultOptedOut: defaultOptedOut
+            requiresPriorConsent: requiresPriorConsent
         )
     }
 
@@ -36,9 +36,9 @@ final class IdentityTests: XCTestCase {
     /// answered.
     func testAnUnansweredConsentRegimeOptsOutAndWritesNothing() {
         let clock = Clock(Date(timeIntervalSince1970: 1_700_000_000))
-        let identity = identity(now: clock.read, defaultOptedOut: true)
+        let identity = identity(now: clock.read, requiresPriorConsent: true)
 
-        XCTAssertTrue(identity.optedOut)
+        XCTAssertTrue(identity.isOptedOut)
         XCTAssertFalse(identity.answered)
         XCTAssertNil(defaults.string(forKey: "vapolia.analytics.installId"))
     }
@@ -46,14 +46,14 @@ final class IdentityTests: XCTestCase {
     /// An acceptance outranks the default, and survives the next launch.
     func testAcceptanceOutranksTheDefault() {
         let clock = Clock(Date(timeIntervalSince1970: 1_700_000_000))
-        let identity = identity(now: clock.read, defaultOptedOut: true)
-        identity.optedOut = false
+        let identity = identity(now: clock.read, requiresPriorConsent: true)
+        identity.isOptedOut = false
 
-        XCTAssertFalse(identity.optedOut)
+        XCTAssertFalse(identity.isOptedOut)
         let id = identity.current()
 
-        let next = self.identity(now: clock.read, defaultOptedOut: true)
-        XCTAssertFalse(next.optedOut)
+        let next = self.identity(now: clock.read, requiresPriorConsent: true)
+        XCTAssertFalse(next.isOptedOut)
         XCTAssertEqual(next.current(), id)
     }
 
@@ -93,24 +93,24 @@ final class IdentityTests: XCTestCase {
         let clock = Clock(start)
         let identity = identity(now: clock.read, refusalLifetime: 100)
 
-        identity.optedOut = true
+        identity.isOptedOut = true
 
         clock.advance(90)
-        XCTAssertTrue(identity.optedOut, "still within the window, and this read refreshes it")
+        XCTAssertTrue(identity.isOptedOut, "still within the window, and this read refreshes it")
 
         clock.advance(90)
-        XCTAssertTrue(identity.optedOut, "the previous read pushed the window forward")
+        XCTAssertTrue(identity.isOptedOut, "the previous read pushed the window forward")
 
         clock.advance(101)
-        XCTAssertFalse(identity.optedOut, "unused for longer than its lifetime, it lapses")
+        XCTAssertFalse(identity.isOptedOut, "unused for longer than its lifetime, it lapses")
     }
 
     func testOptingOutForgetsTheId() {
         let identity = identity(now: { Date(timeIntervalSince1970: 1_700_000_000) })
         let first = identity.current()
 
-        identity.optedOut = true
-        identity.optedOut = false
+        identity.isOptedOut = true
+        identity.isOptedOut = false
 
         XCTAssertNotEqual(identity.current(), first, "opting back in cannot resume the same install")
     }

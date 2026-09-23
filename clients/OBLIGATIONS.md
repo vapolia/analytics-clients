@@ -64,6 +64,12 @@ The Terms link has to reach a privacy policy naming the measurement, the identif
 
 Nothing is sent until the person has answered.
 
+The .NET, Kotlin, Swift and JS clients answer this themselves, from the device locale, whenever
+`requiresPriorConsent` is left null — `localeRequiresPriorConsent(locale)`, or
+`PriorConsentCountries.LocaleRequiresPriorConsent` in .NET. The list is only as current as the version
+you install. `fr-CA` asks first and `en-CA` does not, which covers Quebec by the language: a
+francophone elsewhere in Canada is asked needlessly, an anglophone in Quebec is not asked at all.
+
 ```text
 ┌────────────────────────────────────────────────────────┐
 │                  WELCOME FIRST USE                     │
@@ -128,10 +134,10 @@ turned on.
 
 | Client | Where |
 |---|---|
-| Kotlin | `Analytics.optedOut = true` |
-| Swift | `Analytics.optedOut = true` |
+| Kotlin | `Analytics.isOptedOut = true` |
+| Swift | `Analytics.isOptedOut = true` |
 | JS / Expo | `await Analytics.setOptedOut(true)` |
-| .NET (both) | `IAnalyticsOptOut.SetOptedOut(true)` — injectable, or `MobileAnalytics.Identity` |
+| .NET (both) | `IInstallContext.IsOptedOut = true` — injectable, or `MobileAnalytics.Identity` |
 | Go | None: it belongs in the app that owns the user interface |
 
 Every one of them forgets the installation id, so opting back in later cannot resume the same

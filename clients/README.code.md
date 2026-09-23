@@ -51,8 +51,9 @@ one. `dotnet test` reports "Zero tests ran".
 
 ## The unanswered state
 
-`optedOut` has three states, held in two: an explicit answer in storage, and `defaultOptedOut` in the
-options for when there is none. The unanswered state reads as opted out under a consent regime and
+`isOptedOut` has three states, held in two: an explicit answer in storage, and `requiresPriorConsent` in the
+options for when there is none — itself null by default, resolved once at `start` from the device
+locale through `localeRequiresPriorConsent`. The unanswered state reads as opted out under a consent regime and
 writes nothing — a stored refusal would be an answer nobody gave, and it would also start the
 390-day refusal clock. The install id is minted on the first `track`, never at `start`, which is what
 makes an unanswered start harmless; the js client is the exception and mints in `Identity.load()`, so
@@ -62,9 +63,10 @@ it returns before that when unanswered.
 not leave under an answer that has since changed, or has not been given.
 
 The web client holds the same three states in one cookie — `1` refused, `0` accepted, absent
-unanswered — and an acceptance is written rather than deleted, so it outranks `DefaultOptedOut` on
-the next request. Its `DefaultOptedOutForCountry` exists because one site serves every regime at
-once, while an app binary runs under one region setting at a time.
+unanswered — and an acceptance is written rather than deleted, so it outranks `RequiresPriorConsent` on
+the next request. It resolves the regime per request, from `Accept-Language`, because one site serves
+every regime at once where an app binary runs under one region setting at a time;
+`RequiresPriorConsentForLocale` is where a site answers that itself.
 
 ## Why the body is closed
 

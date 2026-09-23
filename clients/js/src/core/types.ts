@@ -117,15 +117,20 @@ export interface AnalyticsOptions {
    */
   seedInstallId?: () => InstallSeed | undefined;
 
-  /** Toggles collection of analytics. False makes `start` a no-op. */
-  enabled?: boolean;
+  /**
+   * True measures nothing at all: `start` is a no-op, and nothing restarts the client before the
+   * process does. Set it from the build configuration. The person's own switch is `setOptedOut`,
+   * which takes effect at once and either way.
+   */
+  isDebugBuild?: boolean;
 
   /**
-   * What `isOptedOut()` answers while the person has not answered. True is how a country that
-   * requires prior consent is expressed: nothing is sent and no installation id is written until the
-   * welcome popup calls `setOptedOut(false)`.
+   * What `isOptedOut()` answers while the person has not answered. True sends nothing and writes no
+   * installation id until the welcome popup calls `setOptedOut(false)`.
+   *
+   * Null reads the device locale and answers from `localeRequiresPriorConsent`.
    */
-  defaultOptedOut?: boolean;
+  requiresPriorConsent?: boolean | null;
 
   /**
    * ISO 3166-1 alpha-2 countries excluded from the collection. Should be a copy of the exclusion
@@ -210,7 +215,7 @@ export interface AnalyticsAppOptions {
    * Whether the client flushes and spools when the app goes to the background. On a JS runtime this
    * is best effort — the engine is suspended shortly after — which is what `spoolDebounceMs` covers.
    */
-  autoFlushOnBackground?: boolean;
+  flushesOnBackground?: boolean;
 }
 
 /** The flat shape the internals work with, with every default already applied. */
@@ -219,8 +224,8 @@ export interface ResolvedOptions {
   source: string;
   token: string;
   seedInstallId?: () => InstallSeed | undefined;
-  enabled: boolean;
-  defaultOptedOut: boolean;
+  isDebugBuild: boolean;
+  requiresPriorConsent: boolean | null;
   excludedCountries: string[];
   context: () => Context | undefined;
   flushIntervalMs: number;
@@ -237,7 +242,7 @@ export interface ResolvedOptions {
   device: Device;
   logger?: AnalyticsLogger;
   onError?: (error: unknown, reason: string, permanent: boolean) => void;
-  autoFlushOnBackground: boolean;
+  flushesOnBackground: boolean;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -252,8 +257,8 @@ export function resolveOptions(options: AnalyticsOptions): ResolvedOptions {
     source: options.ingestionUrl.replace(/\/+$/, '').split('/').pop() ?? '',
     token: options.token ?? '',
     seedInstallId: options.seedInstallId,
-    enabled: options.enabled ?? true,
-    defaultOptedOut: options.defaultOptedOut ?? false,
+    isDebugBuild: options.isDebugBuild ?? false,
+    requiresPriorConsent: options.requiresPriorConsent ?? null,
     excludedCountries: options.excludedCountries ?? [],
     context: options.context ?? (() => undefined),
     flushIntervalMs: advanced.flushIntervalMs ?? 30_000,
@@ -270,6 +275,6 @@ export function resolveOptions(options: AnalyticsOptions): ResolvedOptions {
     device: advanced.device ?? {},
     logger: advanced.logger,
     onError: advanced.onError,
-    autoFlushOnBackground: app.autoFlushOnBackground ?? true,
+    flushesOnBackground: app.flushesOnBackground ?? true,
   };
 }

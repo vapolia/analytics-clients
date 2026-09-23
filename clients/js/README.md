@@ -93,7 +93,7 @@ without a store release.
 | `start(options)` | Starts the client. Idempotent. Returns a promise you may ignore. |
 | `track(name, props?)` | Props are scalars: string (≤64 chars), finite number, boolean. Max 12 per event. |
 | `flush()` | Sends what is queued. |
-| `setOptedOut(value)` / `isOptedOut()` | The right of opposition. Off by default, or `defaultOptedOut` while the person has not answered; opting out drops the queue and forgets the id. |
+| `setOptedOut(value)` / `isOptedOut()` | The right of opposition. Before any answer it follows `requiresPriorConsent`; opting out drops the queue and forgets the id. |
 | `getInstallId()` | The current id, for a support screen. Undefined when opted out. |
 | `getStats()` | `accepted` / `rejected` / `dropped` / `sent` / `requests`. |
 | `context` (option) | What is true of the installation for a whole batch, read again for every event. Every key must be on the source's `context` whitelist. |
@@ -104,7 +104,7 @@ without a store release.
 | `registerBackgroundFlush()` | Opt-in, see below. |
 
 `AnalyticsOptions` mirrors the .NET client, which is this repository's reference: `ingestionUrl`
-(required), `token`, `seedInstallId`, `enabled`, `defaultOptedOut`, `excludedCountries`, `context` — and the rest under
+(required), `token`, `seedInstallId`, `isDebugBuild`, `requiresPriorConsent`, `excludedCountries`, `context` — and the rest under
 `advanced` and `app`.
 
 `advanced`: `flushIntervalMs` (30 000), `maxEventsPerWindow` (30), `rateWindowMs` (60 000),
@@ -112,30 +112,33 @@ without a store release.
 `requestTimeoutMs` (10 000), `spoolCapacity` (1000, zero disables the spool), `spoolDebounceMs`
 (500), `installIdLifetimeMs` and `optOutLifetimeMs` (390 days each), `device`, `logger`, `onError`
 (`(error, reason, permanent)`, called on every loss next to the log).
-`app`: `autoFlushOnBackground` (true).
+`app`: `flushesOnBackground` (true).
 
 `spoolDebounceMs` is this client's own: it stands in for the `beginBackgroundTask` a JS runtime does
 not have.
 
-## A country that asks first
+## requiresPriorConsent and isOptedOut
 
-Where consent must be given before anything is stored, start with `defaultOptedOut: true` and let the
-welcome popup answer. Nothing is sent and no installation id is written until it does; an acceptance
-takes effect at once, with no restart, and outranks the default on the next launch.
+Depending on the country, consent may need to be given before the client starts collecting data.
+This is controlled by the `requiresPriorConsent` option.
+Which countries require this prior consent, and what the popup says, are in
+[OBLIGATIONS.md](https://github.com/vapolia/analytics-clients/blob/main/clients/OBLIGATIONS.md).
+This option is only used while the person has not answered, so an acceptance survives the next launch.
 
+When `requiresPriorConsent` is null, the client answers with a built-in default, as a convenience.
+**That default must not be taken as a legal basis: the choice stays yours, and so does the liability for it.**
+
+To use your own choice:
 ```ts
 void Analytics.start({
   ingestionUrl: 'https://analytics.example.com/myapp',
-  // your own lookup, from expo-localization's regionCode
-  defaultOptedOut: requiresConsent(getLocales()[0]?.regionCode),
+  requiresPriorConsent: yourRequiresPriorConsent(locale),   // default is localeRequiresPriorConsent()
 });
 
+// the popup's two buttons
 const onAccept = () => Analytics.setOptedOut(false);
 const onRefuse = () => Analytics.setOptedOut(true);
 ```
-
-Which countries ask first, and what the popup says, are in
-[OBLIGATIONS.md](https://github.com/vapolia/analytics-clients/blob/main/clients/OBLIGATIONS.md).
 
 ## Failure behaviour
 

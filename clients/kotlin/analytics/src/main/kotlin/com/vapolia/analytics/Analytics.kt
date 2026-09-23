@@ -45,21 +45,22 @@ object Analytics {
     @Synchronized
     fun start(context: Context, options: AnalyticsOptions) {
         if (client != null) return
-        if (!options.enabled) return
+        if (options.isDebugBuild) return
 
         val app = context.applicationContext
         val installIdentity = InstallIdentity(
             prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE),
             idLifetimeMs = options.advanced.installIdLifetimeMs,
             refusalLifetimeMs = options.advanced.optOutLifetimeMs,
-            defaultOptedOut = options.defaultOptedOut,
+            requiresPriorConsent = options.requiresPriorConsent
+                ?: localeRequiresPriorConsent(DeviceProbe.currentLocale()),
         )
         options.seedInstallId?.invoke()?.let { installIdentity.seed(it) }
 
         identity = installIdentity
         device = DeviceProbe.detect(app)
         options.context?.let { this.context = it }
-        autoFlushOnBackground = options.app.autoFlushOnBackground
+        flushesOnBackground = options.app.flushesOnBackground
         client = AnalyticsClient(
             options = options,
             transport = Transport(
@@ -79,7 +80,7 @@ object Analytics {
 
         // What a previous session spooled must not leave while the person is opted out — or has not
         // yet answered, under a regime that asks first.
-        if (installIdentity.optedOut)
+        if (installIdentity.isOptedOut)
             client?.clear(timeoutMs = 0)
 
         (app as? Application)?.registerActivityLifecycleCallbacks(Lifecycle)
@@ -100,7 +101,7 @@ object Analytics {
             return
         }
 
-        if (installIdentity.optedOut) return
+        if (installIdentity.isOptedOut) return
         val batchContext = encodeContext(context?.invoke(), contextEncoder)
         sender.track(installIdentity.current(), device, name, props, batchContext)
     }
@@ -126,18 +127,18 @@ object Analytics {
      * installation id, so opting back in cannot resume the same installation.
      */
     @JvmStatic
-    var optedOut: Boolean
-        get() = identity?.optedOut ?: false
+    var isOptedOut: Boolean
+        get() = identity?.isOptedOut ?: false
         set(value) {
             val installIdentity = identity ?: return
-            installIdentity.optedOut = value
+            installIdentity.isOptedOut = value
             if (value) client?.clear(DEFAULT_TIMEOUT_MS)
         }
 
     /** The current installation id, for a support screen. Null when opted out or not started. */
     @JvmStatic
     val installId: String?
-        get() = identity?.takeIf { !it.optedOut }?.current()
+        get() = identity?.takeIf { !it.isOptedOut }?.current()
 
     @JvmStatic
     val stats: AnalyticsStats
@@ -215,7 +216,7 @@ object Analytics {
         override fun onActivityStopped(activity: Activity) {
             if (started.decrementAndGet() == 0) {
                 runCatching { onBackground?.invoke() }
-                if (autoFlushOnBackground) client?.flush(timeoutMs = 0, persist = true)
+                if (flushesOnBackground) client?.flush(timeoutMs = 0, persist = true)
             }
         }
 
@@ -226,7 +227,7 @@ object Analytics {
         override fun onActivityDestroyed(activity: Activity) = Unit
     }
 
-    @Volatile private var autoFlushOnBackground = true
+    @Volatile private var flushesOnBackground = true
 
     private val contextEncoder = BatchEncoder()
 

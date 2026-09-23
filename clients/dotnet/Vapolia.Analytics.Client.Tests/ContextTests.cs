@@ -180,7 +180,7 @@ public class BatchContextTests
     {
         public string GetInstallId() => InstallId;
         public Device GetDevice() => new() { Country = "FR" };
-        public bool OptedOut { get; set; }
+        public bool IsOptedOut { get; set; }
     }
 
     sealed class Context(Func<IReadOnlyDictionary<string, object?>?> current) : IAnalyticsContext
@@ -273,7 +273,7 @@ public class TimeZoneTests
     {
         public string GetInstallId() => InstallId;
         public Device GetDevice() => new() { Country = "FR" };
-        public bool OptedOut { get; set; }
+        public bool IsOptedOut { get; set; }
     }
 
     sealed class FixedZone(int? minutes) : IAnalyticsTimeZone

@@ -1,11 +1,12 @@
 import { AppState, type AppStateStatus, type NativeEventSubscription } from 'react-native';
 
+import { localeRequiresPriorConsent } from './core/consent';
 import { Identity } from './core/identity';
 import { Queue } from './core/queue';
 import { Spool } from './core/spool';
 import { FetchPoster } from './core/transport';
 import { resolveOptions } from './core/types';
-import { detectDevice } from './native/device';
+import { currentLocale, detectDevice } from './native/device';
 import { asyncStorage } from './native/storage';
 import { setBackgroundFlusher } from './native/background';
 import type { AnalyticsOptions, AnalyticsStats, Context, Device, Props } from './core/types';
@@ -24,6 +25,7 @@ export type {
   PropValue,
 } from './core/types';
 export { installAgeBucket } from './core/install';
+export { localeRequiresPriorConsent, PRIOR_CONSENT_COUNTRIES } from './core/consent';
 export { registerBackgroundFlush } from './native/background';
 
 interface Running {
@@ -31,7 +33,7 @@ interface Running {
   identity: Identity;
   subscription: NativeEventSubscription | undefined;
   context: () => Context | undefined;
-  autoFlushOnBackground: boolean;
+  flushesOnBackground: boolean;
 }
 
 let running: Running | undefined;
@@ -53,7 +55,10 @@ export async function start(options: AnalyticsOptions): Promise<void> {
   if (starting) return starting;
 
   const resolved = resolveOptions(options);
-  if (!resolved.enabled) return;
+  if (resolved.isDebugBuild) return;
+
+  const requiresPriorConsent =
+    resolved.requiresPriorConsent ?? localeRequiresPriorConsent(currentLocale());
 
   starting = (async () => {
     const identity = new Identity(
@@ -62,7 +67,7 @@ export async function start(options: AnalyticsOptions): Promise<void> {
       resolved.installIdLifetimeMs,
       resolved.optOutLifetimeMs,
       resolved.seedInstallId,
-      resolved.defaultOptedOut
+      requiresPriorConsent
     );
     const queue = new Queue(
       resolved,
@@ -79,7 +84,7 @@ export async function start(options: AnalyticsOptions): Promise<void> {
       identity,
       subscription: undefined,
       context: resolved.context,
-      autoFlushOnBackground: resolved.autoFlushOnBackground,
+      flushesOnBackground: resolved.flushesOnBackground,
     };
     setBackgroundFlusher(() => queue.flush());
 
@@ -208,7 +213,7 @@ function onAppStateChange(state: AppStateStatus): void {
   if (state === 'background') {
     wasActive = false;
     lifecycle.onBackground?.();
-    if (!current.autoFlushOnBackground) return;
+    if (!current.flushesOnBackground) return;
     // Best effort: the JS engine is suspended shortly after this. The spool, written a few hundred
     // milliseconds after every event, is what actually survives.
     void current.queue.persist();

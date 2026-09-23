@@ -18,10 +18,11 @@ public sealed class CookieInstallIdentityProvider(IHttpContextAccessor accessor,
 
     /// <summary>
     /// Whether this visitor has opposed the measurement. Before any answer it reads
-    /// <see cref="AnalyticsOptions.DefaultOptedOut"/>, which is what a country requiring prior consent
-    /// sets: no identity cookie is written until the banner accepts.
+    /// <see cref="AnalyticsWebOptions.RequiresPriorConsentForLocale"/>, then
+    /// <see cref="AnalyticsOptions.RequiresPriorConsent"/>, then the regime of the
+    /// <c>Accept-Language</c> tag: no identity cookie is written until the banner accepts.
     /// </summary>
-    public bool OptedOut
+    public bool IsOptedOut
     {
         get
         {
@@ -37,9 +38,13 @@ public sealed class CookieInstallIdentityProvider(IHttpContextAccessor accessor,
             };
 
             bool Unanswered()
-                => options.WebOptions.DefaultOptedOutForCountry is { } byCountry
-                    ? byCountry(GetDevice().Country)
-                    : options.DefaultOptedOut;
+            {
+                if (options.WebOptions.RequiresPriorConsentForLocale is { } byLocale)
+                    return byLocale(PreferredLanguage(context));
+
+                return options.RequiresPriorConsent
+                       ?? PriorConsentCountries.LocaleRequiresPriorConsent(PreferredLanguage(context));
+            }
         }
         set
         {
@@ -63,7 +68,7 @@ public sealed class CookieInstallIdentityProvider(IHttpContextAccessor accessor,
                 return;
             }
 
-            // "0", not a deletion: an acceptance has to outrank DefaultOptedOut on the next request.
+            // "0", not a deletion: an acceptance has to outrank RequiresPriorConsent on the next request.
             context.Response.Cookies.Append(options.WebOptions.OptOutCookieName, "0", new CookieOptions
             {
                 HttpOnly = true,
@@ -88,7 +93,7 @@ public sealed class CookieInstallIdentityProvider(IHttpContextAccessor accessor,
 
         // Checked first: an opposed visitor gets no identifier written at all, not one written then
         // ignored.
-        if (OptedOut)
+        if (IsOptedOut)
             return null;
 
         if (context.Items.TryGetValue(ItemKey, out var cached) && cached is string existing)

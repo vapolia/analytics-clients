@@ -23,7 +23,7 @@ Analytics.onForeground = { Analytics.track("app_open") }
 Analytics.track("game_end", "result" to "win", "moves" to 34)
 
 // the opposition switch, in the settings screen
-Analytics.optedOut = true
+Analytics.isOptedOut = true
 ```
 
 The client generates and renews the installation id, fills in the device, sends in the background,
@@ -76,7 +76,7 @@ The queue is sent and written down when the app goes to the background, on its o
 | `track(name, vararg props: Pair<String, Any?>)` | `Analytics.track("theme_apply", "night" to true)`. |
 | `track(name, props: Map<String, Any?>?)` | Same, for a map built elsewhere. |
 | `flush()` / `flushBlocking(timeoutMs)` | Send what is queued, without / with waiting. |
-| `optedOut` | The right of opposition. Off by default, or `defaultOptedOut` while the person has not answered; setting it drops the queue and forgets the id. |
+| `isOptedOut` | The right of opposition. Before any answer it follows `requiresPriorConsent`; setting it drops the queue and forgets the id. |
 | `installId` | The current id, for a support screen. Null when opted out. |
 | `stats` | `accepted` / `rejected` / `dropped` / `sent` / `requests`. |
 | `context = { map }` | What is true of the installation for a whole batch, read again for every event. Every key must be on the source's `context` whitelist. |
@@ -87,7 +87,7 @@ The queue is sent and written down when the app goes to the background, on its o
 | `stop(timeoutMs)` | One last flush, then the sender stops. Rarely needed. |
 
 `AnalyticsOptions` mirrors the .NET client, which is this repository's reference: `ingestionUrl`
-(required), `token`, `seedInstallId`, `enabled`, `defaultOptedOut`, `excludedCountries`, `context` —
+(required), `token`, `seedInstallId`, `isDebugBuild`, `requiresPriorConsent`, `excludedCountries`, `context` —
 and the rest under `advanced` and `app`:
 
 ```kotlin
@@ -105,26 +105,30 @@ Analytics.start(this, AnalyticsOptions(
 (null: the app's files dir), `spoolCapacity` (1000, zero disables the spool), `installIdLifetimeMs`
 and `optOutLifetimeMs` (390 days each), `logger` (silent; pass `LogcatLogger` while integrating),
 `onError` (`(Throwable?, String, Boolean)`, called on every loss next to the log).
-`app`: `autoFlushOnBackground` (true).
+`app`: `flushesOnBackground` (true).
 
-## A country that asks first
+## requiresPriorConsent and isOptedOut
 
-Where consent must be given before anything is stored, start with `defaultOptedOut = true` and let the
-welcome popup answer. Nothing is sent and no installation id is written until it does; an acceptance
-takes effect at once, with no restart, and outranks the default on the next launch.
+Depending on the country, consent may need to be given before the client starts collecting data.
+This is controlled by the `requiresPriorConsent` option.
+Which countries require this prior consent, and what the popup says, are in
+[OBLIGATIONS.md](https://github.com/vapolia/analytics-clients/blob/main/clients/OBLIGATIONS.md).
+This option is only used while the person has not answered, so an acceptance survives the next launch.
 
+When `requiresPriorConsent` is null, the client answers with a built-in default, as a convenience.
+**That default must not be taken as a legal basis: the choice stays yours, and so does the liability for it.**
+
+To use your own choice:
 ```kotlin
 Analytics.start(this, AnalyticsOptions(
     ingestionUrl = "https://analytics.example.com/myapp",
-    defaultOptedOut = requiresConsent(Locale.getDefault().country),   // your own lookup
+    requiresPriorConsent = yourRequiresPriorConsent(locale),   // default is localeRequiresPriorConsent()
 ))
 
-onAccept = { Analytics.optedOut = false }
-onRefuse = { Analytics.optedOut = true }
+// the popup's two buttons
+onAccept = { Analytics.isOptedOut = false }
+onRefuse = { Analytics.isOptedOut = true }
 ```
-
-Which countries ask first, and what the popup says, are in
-[OBLIGATIONS.md](https://github.com/vapolia/analytics-clients/blob/main/clients/OBLIGATIONS.md).
 
 ## Failure behaviour
 
@@ -163,21 +167,46 @@ sanitizer, the encoder, the spool and the transport are plain Kotlin, which is w
 
 ## Publishing
 
-`com.vapolia.analytics:analytics`, to Maven Central through the
-[vanniktech plugin](https://vanniktech.github.io/gradle-maven-publish-plugin/).
+`com.vapolia.analytics:analytics` is published to Maven Central
 
 The usual path is a GitHub release: bump `VERSION_NAME` in [`gradle.properties`](https://github.com/vapolia/analytics-clients/blob/main/clients/kotlin/gradle.properties),
-commit, then
+commit, then run the publish workflow
 
 ```bash
 gh release create kotlin-v1.0.1 --title "Kotlin client 1.0.1" --notes "..."
 ```
 
-which runs the publish workflow. It refuses to publish if the tag and `VERSION_NAME` disagree, runs
-the tests again, and uploads. The
-release itself is then validated by hand on the Central Portal. Its four secrets:
-`MAVEN_CENTRAL_USERNAME`, `MAVEN_CENTRAL_PASSWORD`, `SIGNING_IN_MEMORY_KEY`,
-`SIGNING_IN_MEMORY_KEY_PASSWORD`.
+It verifies that the tag and `VERSION_NAME` agree, runs the tests, and uploads.  
+Then validate the release by hand on the Central Portal. 
+
+### Setup
+
+These gh action secrets must be setup first:  
+`MAVEN_CENTRAL_USERNAME`, `MAVEN_CENTRAL_PASSWORD`, `SIGNING_IN_MEMORY_KEY`, `SIGNING_IN_MEMORY_KEY_PASSWORD`.
+
+MAVEN_CENTRAL_* are the user/pass of the user TOKEN (not the user account) at Maven Central.  
+
+```shell
+gh secret set MAVEN_CENTRAL_USERNAME --repo vapolia/analytics-clients                                                                                                                                                                                                                                                                                                                          
+gh secret set MAVEN_CENTRAL_PASSWORD --repo vapolia/analytics-clients                                                                                                                                                                                                                                                                                                                          
+```
+
+`SIGNING_IN_MEMORY_KEY` is the private GPG key in ASCII armor. Its public part must have been pushed to a key server.
+Propagation between key servers takes up to a few hours, and Maven Central rejects a signature whose public key it cannot find.
+Push it before the first release.
+
+```shell
+# Create a PGP key
+gpg --quick-generate-key "Your Name <you@example.com>" rsa4096 sign 2y
+# Backup the key and the revocation certificate (see filename on console)
+gpg --armor --export-secret-keys <key-id>
+# publish the public half, before any release
+gpg --keyserver keys.openpgp.org --send-keys <pub-key-id>
+
+# write the key to gh secrets
+gpg --armor --export-secret-keys <key-id> | gh secret set SIGNING_IN_MEMORY_KEY --repo vapolia/analytics-clients
+gh secret set SIGNING_IN_MEMORY_KEY_PASSWORD --repo vapolia/analytics-clients
+```
 
 ### Pre-releases are snapshots
 
@@ -220,6 +249,3 @@ mavenCentralPassword=<its password>
 signingInMemoryKey=<armoured GPG secret key, newlines stripped>
 signingInMemoryKeyPassword=<its passphrase>
 ```
-
-The namespace `com.vapolia` must be verified on the Central Portal (a DNS TXT record on the matching
-domain) before the first publish.

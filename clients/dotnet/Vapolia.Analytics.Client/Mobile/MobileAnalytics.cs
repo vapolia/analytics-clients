@@ -60,7 +60,7 @@ public static class MobileAnalytics
     {
         lock (Gate)
         {
-            if (!options.Enabled)
+            if (options.IsDebugBuild)
                 return NullAnalytics.Instance;
 
             if (current is not null)
@@ -77,7 +77,7 @@ public static class MobileAnalytics
 
             // What a previous session spooled must not leave while the person is opted out — or has
             // not yet answered, under a regime that asks first.
-            if (identity.OptedOut)
+            if (identity.IsOptedOut)
                 spool.Save([]);
 
             var started = new Sender(
@@ -97,7 +97,7 @@ public static class MobileAnalytics
 
     /// <summary>
     /// Sends what is queued and writes down the rest. Called on its own when the app goes to the
-    /// background, unless <see cref="AnalyticsAppOptions.AutoFlushOnBackground"/> was turned off.
+    /// background, unless <see cref="AnalyticsAppOptions.FlushesOnBackground"/> was turned off.
     /// </summary>
     /// <param name="cancellationToken">Gives up waiting; the queue is spooled either way.</param>
     public static Task FlushAsync(CancellationToken cancellationToken = default)
@@ -128,7 +128,7 @@ public static class MobileAnalytics
             onBackground: () =>
             {
                 lifecycle.RaiseBackground();
-                if (options.AppOptions.AutoFlushOnBackground)
+                if (options.AppOptions.FlushesOnBackground)
                     _ = started.FlushAsync(persist: true);
             });
 }

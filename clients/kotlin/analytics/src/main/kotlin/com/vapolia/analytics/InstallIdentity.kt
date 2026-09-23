@@ -12,7 +12,7 @@ internal class InstallIdentity(
     private val clock: () -> Long = System::currentTimeMillis,
     private val idLifetimeMs: Long = DEFAULT_LIFETIME_MS,
     private val refusalLifetimeMs: Long = DEFAULT_LIFETIME_MS,
-    private val defaultOptedOut: Boolean = false,
+    private val requiresPriorConsent: Boolean = false,
 ) {
     /** The current id, reissued when the old one reached its ceiling. */
     fun current(): String {
@@ -71,13 +71,13 @@ internal class InstallIdentity(
      * A refusal is remembered for [refusalLifetimeMs] and — unlike the identifier — refreshed on
      * every read: an opposition must not quietly lapse while the app is still in use.
      *
-     * Before any answer it reads [defaultOptedOut], which is what a country requiring prior consent
-     * sets. Nothing is written then: an unanswered question is not a refusal, and the id is minted
-     * by [current], which an opted-out client never calls.
+     * Before any answer it reads [requiresPriorConsent]. Nothing is written then: an unanswered
+     * question is not a refusal, and the id is minted by [current], which an opted-out client never
+     * calls.
      */
-    var optedOut: Boolean
+    var isOptedOut: Boolean
         get() {
-            if (!answered()) return defaultOptedOut
+            if (!answered()) return requiresPriorConsent
             if (!prefs.getBoolean(KEY_OPTED_OUT, false)) return false
 
             val now = clock()
