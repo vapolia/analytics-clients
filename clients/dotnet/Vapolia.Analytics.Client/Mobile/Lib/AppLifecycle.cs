@@ -25,15 +25,17 @@ static class AppLifecycle
     /// <summary>
     /// Counts started activities rather than trusting one of them: a rotation stops an activity and
     /// starts another, and treating that as a background trip would emit an app_open per rotation.
+    /// Foreground is raised only after a Background: the launch itself is not a return to the foreground.
     /// </summary>
     sealed class Callbacks(Action onForeground, Action onBackground)
         : Java.Lang.Object, Android.App.Application.IActivityLifecycleCallbacks
     {
         int started;
+        bool backgrounded;
 
         public void OnActivityStarted(Android.App.Activity activity)
         {
-            if (started++ == 0)
+            if (started++ == 0 && backgrounded)
                 onForeground();
         }
 
@@ -42,6 +44,7 @@ static class AppLifecycle
             if (--started <= 0)
             {
                 started = 0;
+                backgrounded = true;
                 onBackground();
             }
         }

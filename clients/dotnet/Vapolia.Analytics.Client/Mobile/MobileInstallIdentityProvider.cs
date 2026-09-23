@@ -14,6 +14,8 @@ public sealed class MobileInstallIdentityProvider : IInstallContext
     const string KeyIssuedAt = "vapolia.analytics.installIdIssuedAt";
     const string KeyFirstSeen = "vapolia.analytics.firstSeen";
     const string KeyOptedOut = "vapolia.analytics.optedOut";
+    // Survives an opposition, unlike firstSeen: holds no identifier, only that first_open was due once.
+    const string KeyFirstRunDone = "vapolia.analytics.firstRunDone";
 
     readonly AnalyticsOptions options;
     readonly Lock gate = new();
@@ -59,6 +61,16 @@ public sealed class MobileInstallIdentityProvider : IInstallContext
         }
     }
 
+    /// <summary>
+    /// The person's answer to the consent question: true accepted, false refused, null not answered
+    /// yet. While it is null, <see cref="IsOptedOut"/> reads <see cref="AnalyticsOptions.RequiresPriorConsent"/>.
+    /// </summary>
+    public bool? ConsentAnswer => Preferences.Get(KeyOptedOut) switch
+    {
+        null => null,
+        var answer => answer != "true",
+    };
+
     /// <summary>Raised when the person opposes, so the sender forgets what it still holds.</summary>
     internal Action? OptedOut { get; set; }
 
@@ -96,6 +108,7 @@ public sealed class MobileInstallIdentityProvider : IInstallContext
                 // is not a new one, and an age bucket reset at every rotation would designate nobody.
                 if (ReadTime(KeyFirstSeen) is null)
                     WriteTime(KeyFirstSeen, now);
+                Preferences.Set(KeyFirstRunDone, "true");
 
                 return issued;
             }
@@ -103,9 +116,9 @@ public sealed class MobileInstallIdentityProvider : IInstallContext
     }
 
     /// <summary>
-    /// Whether this installation has been seen before — false only until the first id is issued.
-    /// What decides <c>first_open</c>, and it is stored apart from the id so a renewal does not count
-    /// as a new installation.
+    /// Whether this installation has never been measured — false once the first id is issued or seeded.
+    /// What decides <c>first_open</c>. It is stored apart from the id, so neither a renewal nor an
+    /// opposition followed by an acceptance counts as a new installation.
     /// </summary>
     public bool IsFirstRun
     {
@@ -114,7 +127,7 @@ public sealed class MobileInstallIdentityProvider : IInstallContext
             lock (gate)
             {
                 SeedIfEmpty();
-                return ReadTime(KeyFirstSeen) is null;
+                return Preferences.Get(KeyFirstRunDone) is null && ReadTime(KeyFirstSeen) is null;
             }
         }
     }
@@ -138,6 +151,7 @@ public sealed class MobileInstallIdentityProvider : IInstallContext
             Preferences.Set(KeyId, id);
             WriteTime(KeyIssuedAt, seed.IssuedAt);
             WriteTime(KeyFirstSeen, seed.FirstSeen);
+            Preferences.Set(KeyFirstRunDone, "true");
             return true;
         }
     }
@@ -198,6 +212,10 @@ public sealed class MobileInstallIdentityProvider : IInstallContext
     void SeedIfEmpty()
     {
         if (options.SeedInstallId is null || Clean.InstallId(Preferences.Get(KeyId)) is not null)
+            return;
+
+        // Seed refuses while opted out: keep the delegate so the old id is adopted after an acceptance.
+        if (IsOptedOut)
             return;
 
         var seed = options.SeedInstallId();

@@ -203,6 +203,9 @@ Pass it to the client as `token` (Kotlin `AnalyticsOptions`, Swift `AnalyticsOpt
 extra, an MSBuild property. `os` and `build` must be those of the binary. A website or a server sends
 no build token.
 
+The platform, the build, the OS version, the locale and the store come from the build token only.
+Without one, a batch carries `country` alone, and the collector measures none of those axes for that build.
+
 ## Rate limiting: for a server or a website only
 
 The collector limits per client address. An app never notices. A website or a game server is one

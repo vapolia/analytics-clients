@@ -11,7 +11,7 @@ Standalone apps:
 ```c#
 builder.UseAnalytics(o =>
 {
-    o.IngestionUrl = "https://analytics.example.com/<sourceName>";
+    o.IngestionUrl = new("https://analytics.example.com/<sourceName>");
 });
 ```
 
@@ -20,7 +20,7 @@ Note: if you wants the visitor's time zone on the events (instead of UTC), regis
 ```c#
 builder.Services.AddAnalytics(o =>
 {
-    o.IngestionUrl = "https://analytics.example.com/<sourceName>";
+    o.IngestionUrl = new("https://analytics.example.com/<sourceName>");
 });
 
 app.UseAnalytics();
@@ -28,9 +28,12 @@ app.UseAnalytics();
 
 App without dependency injection:
 ```c#
-MobileAnalytics.Start(new AnalyticsOptions { IngestionUrl = "https://analytics.example.com/<sourceName>" });
+MobileAnalytics.Start(new AnalyticsOptions { IngestionUrl = new("https://analytics.example.com/<sourceName>") });
 MobileAnalytics.Current.Track(...);
 ```
+
+The app half (`UseAnalytics`, `AddAnalytics` for apps, `MobileAnalytics`, `MobileInstallIdentityProvider`, `IAppLifecycle`) exists on the platform targets only: `net10.0-android`, `net10.0-ios`, `net10.0-maccatalyst` and `net10.0-windows`.
+A project that also targets plain `net10.0`, for unit tests for instance, puts those calls behind `#if ANDROID || IOS || MACCATALYST || WINDOWS`.
 
 ### Quick Usage
 ```c#
@@ -41,10 +44,12 @@ public sealed class GameViewModel(IAnalytics analytics)
 ```
 
 ```c#
-// Sample: tracks app open
-if (identity.IsFirstRun) analytics.Track("first_open");
+// Sample: tracks app open, with IInstallContext identity and IAppLifecycle lifecycle injected.
+// IsFirstRun is on MobileInstallIdentityProvider, the IInstallContext registered for an app.
+if (identity is MobileInstallIdentityProvider { IsFirstRun: true })
+    analytics.Track("first_open");
 analytics.Track("app_open");
-lifecycle.Foreground += () => analytics.Track("app_open");
+lifecycle.Foreground += () => analytics.Track("app_open"); // not raised for the launch itself
 ```
 
 
@@ -73,7 +78,7 @@ Turn the background flush off with `FlushesOnBackground = false`.
 Depending on the country consent may need to be given before the analytics SDK can start collecting data. 
 This is controlled by the `RequiresPriorConsent` flag.  
 Which countries require this prior consent are in [OBLIGATIONS.md](https://github.com/vapolia/analytics-clients/blob/main/clients/OBLIGATIONS.md).  
-This flag is only used when IsOptedOut is null (ie: the user never chose the consent yet).
+This flag is only used while the person has not answered, which `MobileInstallIdentityProvider.ConsentAnswer` reports as null.
 
 When RequiresPriorConsent is null, the SDK answers with a built-in default, as a convenience.
 **That default must not be taken as a legal basis: the choice stays yours, and so does the liability for it.**
@@ -86,10 +91,16 @@ builder.UseAnalytics(o =>
     o.RequiresPriorConsent = YourRequiresPriorConsentFunc(locale); // default is PriorConsentCountries.LocaleRequiresPriorConsent()
 });
 
+// show the popup while the question is unanswered
+if (install is MobileInstallIdentityProvider { ConsentAnswer: null })
+    ShowWelcomePopup();
+
 // the popup's two buttons, on the injected IInstallContext
 onAccept = () => install.IsOptedOut = false;
 onRefuse = () => install.IsOptedOut = true;
 ```
+
+With `RequiresPriorConsent` left null, an app that has no popup yet collects nothing in the countries that require prior consent.
 
 ## Options
 
@@ -128,14 +139,22 @@ builder.Services.AddSingleton<IAnalyticsContext, GameAnalyticsContext>();
 Every key must be on the source's `context` whitelist in the collector's configuration - a missing key is dropped in silence. 
 
 ### Migrating from another implementation 
-When the SDK has no id of its own, `SeedInstallId` can give it one it previously had.
+When the SDK has no id of its own, `SeedInstallId` can give it the id the previous implementation stored.
+The SDK asks for it once, when the person is not opted out. The installation then keeps its id, its age and `IsFirstRun = false`.
+
+The keys and the format are those of the previous implementation. This sample reads ISO-8601 round-trip strings from MAUI `Preferences`:
 
 ```csharp
-o.SeedInstallId = () => new InstallSeed(
-    Preferences.Get("analytics_install_id", null!),
-    DateTimeOffset.FromUnixTimeMilliseconds(Preferences.Get("analytics_install_id_created", 0L)),
-    DateTimeOffset.FromUnixTimeMilliseconds(Preferences.Get("analytics_first_seen", 0L)));
+o.SeedInstallId = () =>
+    Preferences.Get("analytics_install_id", null) is { } id
+        ? new InstallSeed(
+            id,
+            DateTimeOffset.Parse(Preferences.Get("analytics_install_id_created", ""), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
+            DateTimeOffset.Parse(Preferences.Get("analytics_first_seen", ""), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind))
+        : null;
 ```
+
+A date read in the wrong format seeds 1970 or throws. Return null when there is nothing to adopt.
 
 ### Use your own HttpClient
 
@@ -147,12 +166,12 @@ If provided, it takes over all other http-related options (like timeout) which a
 
 ### Reporting losses somewhere other than the log
 
-`OnError` fires next to the log, with:
+`AdvancedOptions.OnError` fires next to the log, with:
 - `permanent: true` for what the collector refused for good (a 404, a malformed payload) and
 - `permanent: false` for what was given up on or dropped by the client's own ceiling. 
 
 ```csharp
-o.OnError = (exception, reason, permanent) =>
+o.AdvancedOptions.OnError = (exception, reason, permanent) =>
 {
     if (exception is not null && IsTransientNetwork(exception))
         return;
@@ -165,6 +184,35 @@ o.OnError = (exception, reason, permanent) =>
 ```
 
 It is null for a loss with no exception behind it like a 4xx or a saturated window.
+
+### Keep iOS running while the queue is sent
+
+When the app goes to the background, the client sends the queue. iOS suspends the app a few seconds later, possibly mid-request.
+`AppOptions.BackgroundScope` opens a scope around each send, and the client disposes it when the send ends.
+On iOS, a background task asks the system for the time to finish:
+
+```csharp
+#if IOS || MACCATALYST
+o.AppOptions.BackgroundScope = name =>
+{
+    var app = UIKit.UIApplication.SharedApplication;
+    nint id = 0;
+    id = app.BeginBackgroundTask(name, () => app.EndBackgroundTask(id));
+    return Task.FromResult<IAsyncDisposable>(new BackgroundTask(id));
+};
+
+sealed class BackgroundTask(nint id) : IAsyncDisposable
+{
+    public ValueTask DisposeAsync()
+    {
+        UIKit.UIApplication.SharedApplication.EndBackgroundTask(id);
+        return ValueTask.CompletedTask;
+    }
+}
+#endif
+```
+
+Without it, the events of a send that iOS suspends and then terminates are lost.
 
 ## Web: what is stored in the browser
 
@@ -278,7 +326,8 @@ The client also does two things on its own:
 | `MobileAnalytics.Start/Current/FlushAsync/StopAsync` | The entry point for an app without a container. |
 | `MobileInstallIdentityProvider.Seed(InstallSeed)` | Adopts an existing installation, once. |
 | `MobileInstallIdentityProvider.Country` | The detected country. Set it to correct the region setting with a country the app reads better. |
-| `MobileInstallIdentityProvider.IsFirstRun` | What decides your own `first_open`. |
+| `MobileInstallIdentityProvider.IsFirstRun` | What decides your own `first_open`. Stays false after an opposition followed by an acceptance. |
+| `MobileInstallIdentityProvider.ConsentAnswer` | `true` accepted, `false` refused, `null` not answered yet: whether to show the welcome popup. |
 
 
 ## Failure behavior
