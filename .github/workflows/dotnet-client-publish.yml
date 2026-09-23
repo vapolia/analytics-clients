@@ -83,10 +83,13 @@ jobs:
 
       # Two packages: the app half, and the ASP.NET Core half that depends on it.
       # /p:Version overrides the <Version> in the csproj, so the tag is the single source of truth.
+      # pwsh, not the job's bash: MSYS rewrites the leading slash into a path, and dotnet then reads
+      # it as a second project.
       - name: Pack
+        shell: pwsh
         run: |
-          dotnet pack $CLIENT -c Release -o artifacts /p:Version=$VERSION
-          dotnet pack $ASPNETCORE -c Release -o artifacts /p:Version=$VERSION
+          dotnet pack $env:CLIENT -c Release -o artifacts "/p:Version=$env:VERSION"
+          dotnet pack $env:ASPNETCORE -c Release -o artifacts "/p:Version=$env:VERSION"
 
       - name: NuGet login OIDC
         id: login
