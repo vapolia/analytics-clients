@@ -32,8 +32,9 @@ MobileAnalytics.Start(new AnalyticsOptions { IngestionUrl = new("https://analyti
 MobileAnalytics.Current.Track(...);
 ```
 
-The app half (`UseAnalytics`, `AddAnalytics` for apps, `MobileAnalytics`, `MobileInstallIdentityProvider`, `IAppLifecycle`) exists on the platform targets only: `net10.0-android`, `net10.0-ios`, `net10.0-maccatalyst` and `net10.0-windows`.
-A project that also targets plain `net10.0`, for unit tests for instance, puts those calls behind `#if ANDROID || IOS || MACCATALYST || WINDOWS`.
+The app half works on the platform targets only: `net10.0-android`, `net10.0-ios`, `net10.0-maccatalyst` and `net10.0-windows`.
+On plain `net10.0`, `MobileAnalytics`, `MobileInstallIdentityProvider` and `IAppLifecycle` exist as no-op stubs, so a library that also targets `net10.0` compiles without `#if`.
+`UseAnalytics` and `AddAnalytics` for apps are the exception: a project that also targets plain `net10.0` puts them behind `#if ANDROID || IOS || MACCATALYST || WINDOWS`.
 
 ### Quick Usage
 ```c#

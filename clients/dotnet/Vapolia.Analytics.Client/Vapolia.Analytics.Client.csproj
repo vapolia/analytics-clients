@@ -47,10 +47,16 @@
   </ItemGroup>
 
   <!-- The installation identity, the device probe and the lifecycle hooks belong to an app running on
-       a device. Plain net10.0 is the core alone, which is what Vapolia.Analytics.Client.AspNetCore
-       builds the server side on; a MAUI Windows app resolves net10.0-windows and gets the app half. -->
-  <ItemGroup>
-    <Compile Remove="Mobile/**" Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == ''" />
+       a device. Plain net10.0 is the core, which is what Vapolia.Analytics.Client.AspNetCore builds the
+       server side on, plus no-op stubs of the app types so a library that also targets net10.0 needs no
+       #if. The app AddAnalytics stays out: it would collide with the AspNetCore one. A MAUI Windows app
+       resolves net10.0-windows and gets the app half. -->
+  <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == ''">
+    <Compile Remove="Mobile/**" />
+    <Compile Include="Mobile/IAppLifecycle.cs" />
+  </ItemGroup>
+  <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) != ''">
+    <Compile Remove="Stubs/**" />
   </ItemGroup>
 
   <ItemGroup>
