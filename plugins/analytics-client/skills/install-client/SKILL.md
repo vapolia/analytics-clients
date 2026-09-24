@@ -42,9 +42,10 @@ An event you need that is not on the list is a request to the operator, not a na
 |---|---|---|
 | Android app | [Kotlin](https://github.com/vapolia/analytics-clients/blob/main/clients/kotlin/README.md) | `com.vapolia.analytics:analytics` (Maven Central, minSdk 24) |
 | iOS / macCatalyst app | [Swift](https://github.com/vapolia/analytics-clients/blob/main/clients/swift/README.md) | SwiftPM `https://github.com/vapolia/analytics-clients`, product `VapoliaAnalytics` (iOS 15+) |
-| Expo / React Native | [JS](https://github.com/vapolia/analytics-clients/blob/main/clients/js/README.md) | `@vapolia/analytics` + peer `@react-native-async-storage/async-storage` |
+| Expo / React Native | [JS](https://github.com/vapolia/analytics-clients/blob/main/clients/js/README.md) | `@vapolia/analytics` + peer `@react-native-async-storage/async-storage`, or your own storage in `advanced.storage` |
 | MAUI / Android / iOS / Windows app | [.NET](https://github.com/vapolia/analytics-clients/blob/main/clients/dotnet/README.md) | `Vapolia.Analytics.Client` |
 | Blazor / ASP.NET Core site | [.NET](https://github.com/vapolia/analytics-clients/blob/main/clients/dotnet/README.md) | `Vapolia.Analytics.Client.AspNetCore` |
+| Server-rendered PHP site | [PHP](https://github.com/vapolia/analytics-clients/blob/main/clients/php/README.md) | `clients/php/src/Analytics.php`, one file, PHP 7.4+ with curl |
 | Game server, backend (Nakama…) | [Go](https://github.com/vapolia/analytics-clients/blob/main/clients/go/README.md) | `go get github.com/vapolia/analytics-clients/clients/go` |
 
 Read the chosen client's README before writing anything: its Summary is the whole integration.

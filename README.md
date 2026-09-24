@@ -13,6 +13,7 @@ Claude Code: the [`install-client` skill](plugins/analytics-client/skills/instal
 | [.NET](clients/dotnet/README.md) | MAUI, Android, iOS, Windows | `Vapolia.Analytics.Client` |
 | [ASP.NET](clients/dotnet/README.md) | Blazor / ASP.NET Core | `Vapolia.Analytics.Client.AspNetCore` |
 | [Go](clients/go/README.md) | Servers | `github.com/vapolia/analytics-clients/clients/go` |
+| [PHP](clients/php/README.md) | Server-rendered PHP sites, PHP 7.4+ | `clients/php/src/Analytics.php`, one file |
 
 [![NuGet][dotnet-nuget-img]][dotnet-nuget-link]
 [![NuGet][aspnet-nuget-img]][aspnet-nuget-link]

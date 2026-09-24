@@ -1,0 +1,41 @@
+name: PHP client Test
+
+# Lint and tests on the oldest and newest supported PHP. Nothing to publish: the client is one file.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'clients/php/**'
+      - '.github/workflows/php-client-test.yml'
+  pull_request:
+    paths:
+      - 'clients/php/**'
+      - '.github/workflows/php-client-test.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: php-client-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: clients/php
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        php: ['7.4', '8.4']
+
+    container: php:${{ matrix.php }}-cli
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - run: php -l src/Analytics.php
+      - run: php tests/run.php

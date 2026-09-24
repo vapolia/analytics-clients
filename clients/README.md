@@ -18,6 +18,7 @@ What integrating a client commits you to, country by country, and the welcome po
 | [`kotlin/`](kotlin/README.md) | Android, minSdk 24, no dependencies. Package `com.vapolia.analytics:analytics`. |
 | [`swift/`](swift/README.md) | iOS 15+ and Mac Catalyst, no dependencies, SwiftPM. Ships its own `PrivacyInfo.xcprivacy`. |
 | [`js/`](js/README.md) | Expo and React Native, TypeScript. Package `@vapolia/analytics` on npm. Requires AsyncStorage or a storage passed as `advanced.storage`. The `expo-*` packages are optional. |
+| [`php/`](php/README.md) | Server-rendered PHP sites, PHP 7.4+ with curl, one file, no Composer required. Identifies visitors with the same cookies as the ASP.NET Core client. |
 | [`dotnet/`](dotnet/README.md) | .NET 10. `Vapolia.Analytics.Client` for MAUI, Android, iOS and Windows apps. `Vapolia.Analytics.Client.AspNetCore` for Blazor and ASP.NET Core servers. Both on NuGet. |
 
 ## The contract every client implements

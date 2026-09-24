@@ -1,0 +1,15 @@
+{
+  "name": "vapolia/analytics",
+  "description": "Server-side PHP client for the Vapolia audience-measurement collector.",
+  "type": "library",
+  "license": "MIT",
+  "homepage": "https://github.com/vapolia/analytics-clients/tree/main/clients/php#readme",
+  "require": {
+    "php": ">=7.4",
+    "ext-curl": "*",
+    "ext-json": "*"
+  },
+  "autoload": {
+    "classmap": ["src/"]
+  }
+}
