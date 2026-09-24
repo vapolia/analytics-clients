@@ -46,12 +46,14 @@ public static class AnalyticsServiceCollectionExtensions
             provider.GetService<IAnalyticsContext>(),
             timeZone: provider.GetService<IAnalyticsTimeZone>()));
 
-        services.TryAddSingleton<IInstallContext>(provider => (IInstallContext?)Started(provider) ?? NullAnalytics.Instance);
+        services.TryAddSingleton<IMobileInstallContext>(provider => Started(provider) ?? NullAnalytics.Instance);
+        services.TryAddSingleton<IInstallContext>(provider => provider.GetRequiredService<IMobileInstallContext>());
+
         services.TryAddSingleton(MobileAnalytics.Lifecycle);
 
         return services;
 
-        static MobileInstallIdentityProvider? Started(IServiceProvider provider)
+        static IMobileInstallContext? Started(IServiceProvider provider)
         {
             provider.GetRequiredService<IAnalytics>();
             return MobileAnalytics.Identity;

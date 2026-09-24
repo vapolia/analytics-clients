@@ -1,14 +1,17 @@
 using System.Globalization;
 
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Vapolia.Analytics.Client.Tests")]
+
 namespace Vapolia.Analytics.Client;
 
 /// <summary>
-/// The installation id and the device context of a phone. The id lives in the app's own preferences
-/// — <c>SharedPreferences</c> on Android, <c>NSUserDefaults</c> on iOS — and deliberately not in the
-/// keychain, which survives the app being deleted and would make the id outlive the installation it
-/// names. Renewing it is the editor's obligation, not the collector's.
+/// The installation id and the device context of a mobile app.
 /// </summary>
-public sealed class MobileInstallIdentityProvider : IInstallContext
+/// <remarks>
+/// The id lives in the app's own preferences <c>SharedPreferences</c> on Android, <c>NSUserDefaults</c> on iOS,
+/// so it does not survive the app being deleted, so the InstallId does not outlive the installation, which is a legal constraint.
+/// </remarks>
+sealed class MobileInstallContext : IMobileInstallContext
 {
     const string KeyId = "vapolia.analytics.installId";
     const string KeyIssuedAt = "vapolia.analytics.installIdIssuedAt";
@@ -19,12 +22,13 @@ public sealed class MobileInstallIdentityProvider : IInstallContext
 
     readonly AnalyticsOptions options;
     readonly Lock gate = new();
+    
     string? country;
     bool countryDetected;
 
     /// <summary>Reads and renews the id according to <see cref="AnalyticsAdvancedOptions.InstallIdLifetime"/>.</summary>
     /// <param name="options">The same options the sender was given.</param>
-    public MobileInstallIdentityProvider(AnalyticsOptions options) => this.options = options;
+    public MobileInstallContext(AnalyticsOptions options) => this.options = options;
 
     /// <summary>
     /// The right of opposition. Turning it on forgets the id, so opting back in cannot resume the same

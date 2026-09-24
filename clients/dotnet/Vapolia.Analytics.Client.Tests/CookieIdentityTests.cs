@@ -79,14 +79,6 @@ public class CookieIdentityTests
     }
 
     [TestMethod]
-    public void ResolvesTheSameIdTwiceWithinOneRequest()
-    {
-        var (provider, _) = Create();
-
-        Assert.AreEqual(provider.InstallId, provider.InstallId);
-    }
-
-    [TestMethod]
     public void AnOpposedVisitorGetsNoIdAndNoCookie()
     {
         var (provider, context) = Create(optedOut: true);

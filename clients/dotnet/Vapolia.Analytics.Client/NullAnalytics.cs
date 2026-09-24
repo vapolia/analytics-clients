@@ -6,7 +6,7 @@ namespace Vapolia.Analytics.Client;
 ///
 /// It exists so a DEBUG build needs no <c>#if</c> and no second implementation at the call sites.
 /// </summary>
-public sealed class NullAnalytics : IAnalytics, IInstallContext
+sealed class NullAnalytics : IAnalytics, IMobileInstallContext
 {
     /// <summary>The one instance; it holds nothing.</summary>
     public static readonly NullAnalytics Instance = new();
@@ -36,4 +36,13 @@ public sealed class NullAnalytics : IAnalytics, IInstallContext
 
     /// <inheritdoc/>
     public string? Country => null;
+
+    public bool? ConsentAnswer { get; }
+    public bool IsFirstRun { get; }
+    public bool Seed(InstallSeed seed)
+    {
+        throw new NotImplementedException();
+    }
+
+    public DateTimeOffset? FirstSeen { get; }
 }

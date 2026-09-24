@@ -34,9 +34,9 @@ public static class MobileAnalytics
 
     /// <summary>
     /// The installation identity, once started: the opposition switch lives here, and so does the
-    /// country an app can correct with <see cref="MobileInstallIdentityProvider.Country"/>.
+    /// country an app can correct with <see cref="MobileInstallContext.Country"/>.
     /// </summary>
-    public static MobileInstallIdentityProvider? Identity { get; private set; }
+    public static IMobileInstallContext? Identity { get; private set; }
 
     /// <summary>
     /// When the app leaves the foreground and when it comes back — what the client already watches to
@@ -73,7 +73,7 @@ public static class MobileAnalytics
             httpClient ??= options.AdvancedOptions.CreateHttpClient?.Invoke() ?? new HttpClient { Timeout = options.AdvancedOptions.RequestTimeout };
             options.AdvancedOptions.SpoolPath ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "vapolia-analytics-spool.json");
 
-            var identity = new MobileInstallIdentityProvider(options);
+            var identity = new MobileInstallContext(options);
             var spool = new PersistPendingItemsToLocalStorageHelper(options.AdvancedOptions.SpoolPath, options.AdvancedOptions.SpoolCapacity, logger);
 
             // What a previous session spooled must not leave while the person is opted out — or has

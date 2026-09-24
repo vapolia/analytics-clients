@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Microsoft.Extensions.Logging;
 
 namespace Vapolia.Analytics.Client;
@@ -5,13 +6,14 @@ namespace Vapolia.Analytics.Client;
 // Plain net10.0 only: for a library that also targets net10.0 compiles without #if
 
 /// <summary>Not supported, not a platform target.</summary>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public static class MobileAnalytics
 {
     /// <summary>Not supported, not a platform target.</summary>
     public static IAnalytics Current => throw new NotImplementedException("The build target is not a platform target.");
 
     /// <summary>Not supported, not a platform target.</summary>
-    public static MobileInstallIdentityProvider? Identity => throw new NotImplementedException("The build target is not a platform target.");
+    public static IMobileInstallContext? Identity => throw new NotImplementedException("The build target is not a platform target.");
     
     /// <summary>Not supported, not a platform target.</summary>
     public static IAppLifecycle Lifecycle => throw new NotImplementedException("The build target is not a platform target.");
@@ -28,10 +30,11 @@ public static class MobileAnalytics
 }
 
 /// <summary>Not supported, not a platform target.</summary>
-public sealed class MobileInstallIdentityProvider : IInstallContext
+[EditorBrowsable(EditorBrowsableState.Never)]
+public sealed class MobileInstallContext : IMobileInstallContext
 {
     /// <summary>Not supported, not a platform target.</summary>
-    public MobileInstallIdentityProvider(AnalyticsOptions options) 
+    public MobileInstallContext(AnalyticsOptions options) 
         => throw new NotImplementedException("The build target is not a platform target.");
 
     /// <summary>Not supported, not a platform target.</summary>

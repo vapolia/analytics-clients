@@ -74,7 +74,7 @@ public sealed class CookieInstallIdentityProvider(IHttpContextAccessor accessor,
 
             if (context.Response.HasStarted)
             {
-                Logger?.LogWarning("analytics: the response has started, the opposition cookie cannot be written. Set IsOptedOut from a server-rendered request.");
+                Logger?.LogWarning("Opposition cookie cannot be written: http response has already started. Set IsOptedOut from a server-rendered request");
                 return;
             }
 
@@ -203,7 +203,7 @@ public sealed class CookieInstallIdentityProvider(IHttpContextAccessor accessor,
     void WarnNoHttpContext()
     {
         if (Interlocked.Exchange(ref warnedNoHttpContext, 1) == 0)
-            Logger?.LogWarning("analytics: no HttpContext, nothing is measured. Only server-rendered requests are supported, not interactive Blazor components.");
+            Logger?.LogWarning("No HttpContext: only server-rendered requests are supported, not interactive Blazor components");
     }
 
     static int warnedNoHttpContext;
