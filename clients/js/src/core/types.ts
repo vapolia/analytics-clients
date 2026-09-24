@@ -63,7 +63,7 @@ export interface AnalyticsLogger {
 
 /**
  * The key/value store the client persists to. `@react-native-async-storage/async-storage` satisfies
- * it as is; the tests pass an in-memory one.
+ * it as is; an app can pass its own through `advanced.storage`, the tests pass an in-memory one.
  */
 export interface AnalyticsStorage {
   getItem(key: string): Promise<string | null>;
@@ -200,6 +200,12 @@ export interface AnalyticsAdvancedOptions {
    */
   device?: Device;
 
+  /**
+   * Where the installation id, the consent answer and the spool are kept. Defaults to
+   * `@react-native-async-storage/async-storage`, which is then not needed when this is given.
+   */
+  storage?: AnalyticsStorage;
+
   logger?: AnalyticsLogger;
 
   /**
@@ -240,6 +246,7 @@ export interface ResolvedOptions {
   installIdLifetimeMs: number;
   optOutLifetimeMs: number;
   device: Device;
+  storage?: AnalyticsStorage;
   logger?: AnalyticsLogger;
   onError?: (error: unknown, reason: string, permanent: boolean) => void;
   flushesOnBackground: boolean;
@@ -273,6 +280,7 @@ export function resolveOptions(options: AnalyticsOptions): ResolvedOptions {
     installIdLifetimeMs: advanced.installIdLifetimeMs ?? 390 * DAY_MS,
     optOutLifetimeMs: advanced.optOutLifetimeMs ?? 390 * DAY_MS,
     device: advanced.device ?? {},
+    storage: advanced.storage,
     logger: advanced.logger,
     onError: advanced.onError,
     flushesOnBackground: app.flushesOnBackground ?? true,

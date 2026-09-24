@@ -25,6 +25,7 @@ export const DEFAULT_LIFETIME_MS = 390 * DAY_MS;
 export class Identity {
   private id: string | undefined;
   private optedOut = false;
+  private answer: boolean | null = null;
   private firstOpenSent = true;
   private loaded = false;
   private firstSeenAt: number | undefined;
@@ -53,6 +54,7 @@ export class Identity {
 
     this.loaded = true;
     this.firstOpenSent = firstOpen === 'true';
+    this.answer = optedOut === null ? null : optedOut !== 'true';
 
     // Before any answer, `requiresPriorConsent` decides. Nothing is written and no id is minted:
     // an unanswered question is not a refusal.
@@ -68,6 +70,7 @@ export class Identity {
       const recordedAt = Number.parseInt(optedOutAtRaw ?? '', 10);
       if (Number.isFinite(recordedAt) && this.now() - recordedAt >= this.refusalLifetimeMs) {
         this.optedOut = false;
+        this.answer = null;
         await this.remove(KEY_OPTED_OUT);
         await this.remove(KEY_OPTED_OUT_AT);
       } else {
@@ -138,6 +141,11 @@ export class Identity {
     return this.optedOut;
   }
 
+  /** True accepted, false refused, null not answered yet. */
+  consentAnswer(): boolean | null {
+    return this.answer;
+  }
+
   /** When the installation was first seen, or undefined before the first id was issued. */
   firstSeen(): number | undefined {
     return this.firstSeenAt;
@@ -148,6 +156,7 @@ export class Identity {
    */
   async setOptedOut(value: boolean): Promise<void> {
     this.optedOut = value;
+    this.answer = !value;
     await this.write(KEY_OPTED_OUT, value ? 'true' : 'false');
     if (value) await this.write(KEY_OPTED_OUT_AT, String(this.now()));
     else await this.remove(KEY_OPTED_OUT_AT);

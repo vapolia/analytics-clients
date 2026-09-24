@@ -46,9 +46,20 @@ are yours to name and to place, from `isFirstRun()` and `lifecycle.onForeground`
 npx expo install @vapolia/analytics @react-native-async-storage/async-storage
 ```
 
-`@react-native-async-storage/async-storage` is the one required peer: without storage there is no
-stable installation id and no recovery of unsent events. It also carries its own iOS privacy manifest
-entry for `UserDefaults` (reason `CA92.1`), so this client adds nothing to declare.
+The client needs a key/value storage for the installation id, the consent answer and unsent events.
+It uses `@react-native-async-storage/async-storage` by default. AsyncStorage carries its own iOS privacy
+manifest entry for `UserDefaults` (reason `CA92.1`), so this client adds nothing to declare.
+An app that already has a storage (MMKV, for example) passes it as `advanced.storage` and does not
+install AsyncStorage. It must expose `getItem`, `setItem` and `removeItem`, returning promises:
+
+```ts
+void Analytics.start({
+  ingestionUrl: 'https://analytics.example.com/<sourceName>',
+  advanced: { storage: myStorage },
+});
+```
+
+Without either, `start` logs a warning and measures nothing.
 
 These are **optional** — each one only adds a field to the device context:
 
@@ -94,6 +105,8 @@ without a store release.
 | `track(name, props?)` | Props are scalars: string (≤64 chars), finite number, boolean. Max 12 per event. |
 | `flush()` | Sends what is queued. |
 | `setOptedOut(value)` / `isOptedOut()` | The right of opposition. Before any answer it follows `requiresPriorConsent`; opting out drops the queue and forgets the id. |
+| `consentAnswer()` | True accepted, false refused, null not answered yet. Null until `start` resolves. |
+| `localeRequiresPriorConsent(locale)` | The default for `requiresPriorConsent`, from a BCP-47 tag. |
 | `getInstallId()` | The current id, for a support screen. Undefined when opted out. |
 | `getStats()` | `accepted` / `rejected` / `dropped` / `sent` / `requests`. |
 | `context` (option) | What is true of the installation for a whole batch, read again for every event. Every key must be on the source's `context` whitelist. |
@@ -110,7 +123,7 @@ without a store release.
 `advanced`: `flushIntervalMs` (30 000), `maxEventsPerWindow` (30), `rateWindowMs` (60 000),
 `batchSize` (100, the collector's ceiling), `queueCapacity` (4000), `maxAttempts` (3),
 `requestTimeoutMs` (10 000), `spoolCapacity` (1000, zero disables the spool), `spoolDebounceMs`
-(500), `installIdLifetimeMs` and `optOutLifetimeMs` (390 days each), `device`, `logger`, `onError`
+(500), `installIdLifetimeMs` and `optOutLifetimeMs` (390 days each), `device`, `storage`, `logger`, `onError`
 (`(error, reason, permanent)`, called on every loss next to the log).
 `app`: `flushesOnBackground` (true).
 
@@ -123,22 +136,31 @@ Depending on the country, consent may need to be given before the client starts 
 This is controlled by the `requiresPriorConsent` option.
 Which countries require this prior consent, and what the popup says, are in
 [OBLIGATIONS.md](https://github.com/vapolia/analytics-clients/blob/main/clients/OBLIGATIONS.md).
-This option is only used while the person has not answered, so an acceptance survives the next launch.
+This option is only used while the person has not answered, which `consentAnswer()` reports as null.
 
 When `requiresPriorConsent` is null, the client answers with a built-in default, as a convenience.
 **That default must not be taken as a legal basis: the choice stays yours, and so does the liability for it.**
 
 To use your own choice:
 ```ts
-void Analytics.start({
+import Analytics, { localeRequiresPriorConsent } from '@vapolia/analytics';
+import { getLocales } from 'expo-localization';
+
+const locale = getLocales()[0]?.languageTag;
+await Analytics.start({
   ingestionUrl: 'https://analytics.example.com/myapp',
-  requiresPriorConsent: yourRequiresPriorConsent(locale),   // default is localeRequiresPriorConsent()
+  requiresPriorConsent: yourRequiresPriorConsent(locale), // default is localeRequiresPriorConsent(locale)
 });
+
+// show the popup while the question is unanswered
+if (Analytics.consentAnswer() === null) showWelcomePopup();
 
 // the popup's two buttons
 const onAccept = () => Analytics.setOptedOut(false);
 const onRefuse = () => Analytics.setOptedOut(true);
 ```
+
+With `requiresPriorConsent` left null, an app that has no popup yet collects nothing in the countries that require prior consent.
 
 ## Failure behaviour
 

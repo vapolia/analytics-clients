@@ -17,7 +17,7 @@ What integrating a client commits you to, country by country, and the welcome po
 | [`go/`](go/README.md) | Go 1.24+, stdlib only, for server-side callers. |
 | [`kotlin/`](kotlin/README.md) | Android, minSdk 24, no dependencies. Package `com.vapolia.analytics:analytics`. |
 | [`swift/`](swift/README.md) | iOS 15+ and Mac Catalyst, no dependencies, SwiftPM. Ships its own `PrivacyInfo.xcprivacy`. |
-| [`js/`](js/README.md) | Expo and React Native, TypeScript. Package `@vapolia/analytics` on npm. Requires AsyncStorage. The `expo-*` packages are optional. |
+| [`js/`](js/README.md) | Expo and React Native, TypeScript. Package `@vapolia/analytics` on npm. Requires AsyncStorage or a storage passed as `advanced.storage`. The `expo-*` packages are optional. |
 | [`dotnet/`](dotnet/README.md) | .NET 10. `Vapolia.Analytics.Client` for MAUI, Android, iOS and Windows apps. `Vapolia.Analytics.Client.AspNetCore` for Blazor and ASP.NET Core servers. Both on NuGet. |
 
 ## The contract every client implements

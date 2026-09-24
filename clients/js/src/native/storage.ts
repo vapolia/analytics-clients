@@ -1,16 +1,21 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
 import type { AnalyticsStorage } from '../core/types';
+import { loadAsyncStorage } from './optional';
 
 /**
- * The installation id and the spool. AsyncStorage is a required peer: without storage there is no
- * stable id and no recovery of what could not be sent, which is most of what this client does.
+ * The installation id, the consent answer and the spool, when the app passes no `advanced.storage`.
+ * Without storage there is no stable id and no recovery of what could not be sent, so the client
+ * does not start without one.
  *
- * It also carries its own iOS privacy manifest entry for `UserDefaults` (reason CA92.1), so an app
- * using it has nothing to declare for this client.
+ * AsyncStorage carries its own iOS privacy manifest entry for `UserDefaults` (reason CA92.1), so an
+ * app using it has nothing to declare for this client.
  */
-export const asyncStorage: AnalyticsStorage = {
-  getItem: (key) => AsyncStorage.getItem(key),
-  setItem: (key, value) => AsyncStorage.setItem(key, value),
-  removeItem: (key) => AsyncStorage.removeItem(key),
-};
+export function defaultStorage(): AnalyticsStorage | undefined {
+  const asyncStorage = loadAsyncStorage();
+  if (!asyncStorage) return undefined;
+
+  return {
+    getItem: (key) => asyncStorage.getItem(key),
+    setItem: (key, value) => asyncStorage.setItem(key, value),
+    removeItem: (key) => asyncStorage.removeItem(key),
+  };
+}

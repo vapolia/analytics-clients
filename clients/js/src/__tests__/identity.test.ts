@@ -126,4 +126,23 @@ describe('Identity', () => {
     expect(second.isOptedOut()).toBe(false);
     expect(second.current()).toBe(first.current());
   });
+
+  it('reports the consent answer: null until asked, then the last button pressed', async () => {
+    const storage = new MemoryStorage();
+    const first = new Identity(storage, undefined, undefined, undefined, undefined, true);
+    await first.load();
+    expect(first.consentAnswer()).toBeNull();
+
+    await first.setOptedOut(false);
+    expect(first.consentAnswer()).toBe(true);
+
+    const second = new Identity(storage, undefined, undefined, undefined, undefined, true);
+    await second.load();
+    expect(second.consentAnswer()).toBe(true);
+
+    await second.setOptedOut(true);
+    const third = new Identity(storage);
+    await third.load();
+    expect(third.consentAnswer()).toBe(false);
+  });
 });

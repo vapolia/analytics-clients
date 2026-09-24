@@ -7,7 +7,7 @@ import { Spool } from './core/spool';
 import { FetchPoster } from './core/transport';
 import { resolveOptions } from './core/types';
 import { currentLocale, detectDevice } from './native/device';
-import { asyncStorage } from './native/storage';
+import { defaultStorage } from './native/storage';
 import { setBackgroundFlusher } from './native/background';
 import type { AnalyticsOptions, AnalyticsStats, Context, Device, Props } from './core/types';
 
@@ -57,12 +57,20 @@ export async function start(options: AnalyticsOptions): Promise<void> {
   const resolved = resolveOptions(options);
   if (resolved.isDebugBuild) return;
 
+  const storage = resolved.storage ?? defaultStorage();
+  if (!storage) {
+    console.warn(
+      '[analytics] no storage: pass advanced.storage or install @react-native-async-storage/async-storage. Nothing is measured.'
+    );
+    return;
+  }
+
   const requiresPriorConsent =
     resolved.requiresPriorConsent ?? localeRequiresPriorConsent(currentLocale());
 
   starting = (async () => {
     const identity = new Identity(
-      asyncStorage,
+      storage,
       () => Date.now(),
       resolved.installIdLifetimeMs,
       resolved.optOutLifetimeMs,
@@ -74,7 +82,7 @@ export async function start(options: AnalyticsOptions): Promise<void> {
       new FetchPoster(resolved.ingestionUrl, resolved.requestTimeoutMs, resolved.token || undefined),
       // Zero capacity is how an app turns the spool off, as in the .NET client.
       resolved.spoolCapacity > 0
-        ? new Spool(asyncStorage, resolved.source, resolved.spoolCapacity)
+        ? new Spool(storage, resolved.source, resolved.spoolCapacity)
         : undefined,
       () => identity.current()
     );
@@ -150,6 +158,14 @@ export async function setOptedOut(value: boolean): Promise<void> {
 
 export function isOptedOut(): boolean {
   return running?.identity.isOptedOut() ?? false;
+}
+
+/**
+ * The person's answer to the consent question: true accepted, false refused, null not answered yet.
+ * Show the welcome popup while it is null. Null before `start` has resolved.
+ */
+export function consentAnswer(): boolean | null {
+  return running?.identity.consentAnswer() ?? null;
 }
 
 /** The current installation id, for a support screen. Undefined when opted out or not started. */
@@ -229,6 +245,7 @@ export const Analytics = {
   stop,
   setOptedOut,
   isOptedOut,
+  consentAnswer,
   getInstallId,
   getStats,
   updateDevice,
