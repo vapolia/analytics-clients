@@ -6,10 +6,6 @@ namespace Vapolia.Analytics.Client;
 public interface IMobileInstallContext : IInstallContext
 {
     /// <summary>
-    /// The answer to the consent question.
-    /// </summary>
-    bool? ConsentAnswer { get; }
-    /// <summary>
     /// Whether the app was installed for the first time.
     /// </summary>
     bool IsFirstRun { get; }

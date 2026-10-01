@@ -176,6 +176,37 @@ public class CookieIdentityTests
     }
 
     [TestMethod]
+    public void ConsentAnswerReadsTheOppositionCookie()
+    {
+        Assert.IsNull(Create().Provider.ConsentAnswer);
+        Assert.IsTrue(Create(accepted: true).Provider.ConsentAnswer);
+        Assert.IsFalse(Create(optedOut: true).Provider.ConsentAnswer);
+    }
+
+    [TestMethod]
+    public void ConsentAnswerReflectsAnAnswerGivenDuringTheRequest()
+    {
+        var (provider, _) = Create(accepted: true);
+
+        provider.IsOptedOut = true;
+
+        Assert.IsFalse(provider.ConsentAnswer);
+    }
+
+    [TestMethod]
+    public void RequiresPriorConsentIgnoresTheAnswer()
+    {
+        void Unset(AnalyticsOptions o) => o.RequiresPriorConsent = null;
+
+        var (german, _) = Create(acceptLanguage: "de-DE,de;q=0.9", accepted: true, configure: Unset);
+        Assert.IsTrue(german.RequiresPriorConsent);
+        Assert.IsFalse(german.IsOptedOut);
+
+        var (french, _) = Create(acceptLanguage: "fr-FR", configure: Unset);
+        Assert.IsFalse(french.RequiresPriorConsent);
+    }
+
+    [TestMethod]
     public void ReadsTheCountryFromAcceptLanguage()
     {
         var (provider, _) = Create(acceptLanguage: "fr-FR,fr;q=0.9,en;q=0.8");

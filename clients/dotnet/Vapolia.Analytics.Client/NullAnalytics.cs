@@ -50,6 +50,11 @@ public sealed class NullAnalytics : IAnalytics, IMobileInstallContext
     /// Stub: returns false
     /// </summary>
     public bool? ConsentAnswer => false;
+
+    /// <summary>
+    /// Stub: returns false
+    /// </summary>
+    public bool RequiresPriorConsent => false;
     
     /// <summary>
     /// Stub: returns false

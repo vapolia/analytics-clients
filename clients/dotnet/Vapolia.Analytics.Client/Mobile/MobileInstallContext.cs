@@ -43,8 +43,7 @@ sealed class MobileInstallContext : IMobileInstallContext
     {
         get => Preferences.Get(KeyOptedOut) switch
         {
-            null => options.RequiresPriorConsent
-                    ?? PriorConsentCountries.LocaleRequiresPriorConsent(DeviceProbe.CurrentLocale()),
+            null => RequiresPriorConsent,
             var answer => answer == "true",
         };
         set
@@ -74,6 +73,13 @@ sealed class MobileInstallContext : IMobileInstallContext
         null => null,
         var answer => answer != "true",
     };
+
+    /// <summary>
+    /// <see cref="AnalyticsOptions.RequiresPriorConsent"/>, or the regime of the device locale when
+    /// that is null.
+    /// </summary>
+    public bool RequiresPriorConsent
+        => options.RequiresPriorConsent ?? PriorConsentCountries.LocaleRequiresPriorConsent(DeviceProbe.CurrentLocale());
 
     /// <summary>Raised when the person opposes, so the sender forgets what it still holds.</summary>
     internal Action? OptedOut { get; set; }

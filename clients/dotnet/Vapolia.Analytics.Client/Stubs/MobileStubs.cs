@@ -44,6 +44,9 @@ public sealed class MobileInstallContext : IMobileInstallContext
     public bool? ConsentAnswer => throw new NotImplementedException("The build target is not a platform target.");
 
     /// <summary>Not supported, not a platform target.</summary>
+    public bool RequiresPriorConsent => throw new NotImplementedException("The build target is not a platform target.");
+
+    /// <summary>Not supported, not a platform target.</summary>
     public string? InstallId => throw new NotImplementedException("The build target is not a platform target.");
 
     /// <summary>Not supported, not a platform target.</summary>

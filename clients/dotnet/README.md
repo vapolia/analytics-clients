@@ -26,6 +26,8 @@ builder.Services.AddAnalytics(o =>
 app.UseAnalytics();
 ``` 
 
+A JavaScript front end (Next.js, SPA) posts its events to the backend, which maps them with [`MapAnalyticsRelay`](#web-relay-for-a-javascript-front-end).
+
 App without dependency injection:
 ```c#
 MobileAnalytics.Start(new AnalyticsOptions { IngestionUrl = new("https://analytics.example.com/<sourceName>") });
@@ -79,7 +81,7 @@ Turn the background flush off with `FlushesOnBackground = false`.
 Depending on the country consent may need to be given before the analytics SDK can start collecting data. 
 This is controlled by the `RequiresPriorConsent` flag.  
 Which countries require this prior consent are in [OBLIGATIONS.md](https://github.com/vapolia/analytics-clients/blob/main/clients/OBLIGATIONS.md).  
-This flag is only used while the person has not answered, which `MobileInstallIdentityProvider.ConsentAnswer` reports as null.
+This flag is only used while the person has not answered, which `IInstallContext.ConsentAnswer` reports as null.
 
 When RequiresPriorConsent is null, the SDK answers with a built-in default, as a convenience.
 **That default must not be taken as a legal basis: the choice stays yours, and so does the liability for it.**
@@ -93,7 +95,7 @@ builder.UseAnalytics(o =>
 });
 
 // show the popup while the question is unanswered
-if (install is MobileInstallIdentityProvider { ConsentAnswer: null })
+if (install.ConsentAnswer is null)
     ShowWelcomePopup();
 
 // the popup's two buttons, on the injected IInstallContext
@@ -266,8 +268,67 @@ builder.Services.AddAnalytics(o =>
 Until that visitor accepts, no identity cookie is written and nothing is sent. 
 Accepting writes `_vau_off=0`, which outranks the default on the next request.
 
+Both cookies are HttpOnly, so a banner script cannot read them. `MapAnalyticsRelay` serves this state, or return it from an endpoint of your own with `IInstallContext`:
+
+| Member | Value |
+|---|---|
+| `RequiresPriorConsent` | Whether the regime of this request requires consent first, whatever the visitor answered. Feeds the banner's "consent needed" switch. |
+| `ConsentAnswer` | `true` accepted, `false` refused, `null` unanswered. |
+
+```csharp
+app.MapGet("/api/analytics/state", (IInstallContext c) => new { c.RequiresPriorConsent, c.ConsentAnswer });
+```
+
 `UseAnalytics()` must run before the response starts — a cookie cannot be set afterwards. 
 If it is too late, the visit is simply not measured.
+
+### Web: relay for a JavaScript front end
+
+A site whose pages are rendered elsewhere (Next.js, a SPA) posts its events to the ASP.NET Core backend on the same domain, and the backend emits them. `MapAnalyticsRelay` maps the three endpoints the browser calls:
+
+| Endpoint | Body | Answer |
+|---|---|---|
+| `GET {prefix}/state` | | `{"requiresPriorConsent":bool,"consentAnswer":bool\|null}` |
+| `POST {prefix}/consent` | `{"accepted":bool}` | 204, or 400 on an unreadable body |
+| `POST {prefix}/events` | `[{"name":"…","props":{…}}]`, any content type | 204, always, no body |
+
+Only the declared events and their declared keys are relayed. Anything else is dropped silently, as are events beyond `MaxEventsPerRequest` (20) and bodies over `MaxBodyBytes` (64 KB).
+
+```csharp
+app.MapAnalyticsRelay("/api/web/analytics", o =>
+{
+    // Per key, on every event that accepts it. Return the value to keep, or null to drop the prop.
+    o.Prop("duration_s", p => new(Math.Clamp(Convert.ToDouble(p.Value), 0, 86400)));
+    o.Prop("content_id", async p =>
+        await p.Context.RequestServices.GetRequiredService<Catalog>().IsPublicAsync(p.Props["content_type"], p.Value) ? p.Value : null);
+
+    // Per event: the keys the browser may send, and the props the server sets itself.
+    o.Event("session_start");
+    o.Event("content_viewed", "content_type", "content_id", "duration_s");
+    o.Event("route_shared", "content_id").With("content_type", "route");
+}).RequireRateLimiting("analytics");
+```
+
+The browser side:
+
+```js
+const base = "/api/web/analytics";
+const queue = [];
+export const track = (name, props) => queue.push({ name, props });
+const flush = () => queue.length && navigator.sendBeacon(`${base}/events`, JSON.stringify(queue.splice(0, 20)));
+addEventListener("visibilitychange", () => document.visibilityState === "hidden" && flush());
+setInterval(flush, 10000);
+
+// Banner: ask only where the regime requires it, and resync from the server's answer.
+const { requiresPriorConsent, consentAnswer } = await (await fetch(`${base}/state`)).json();
+export const answer = accepted => fetch(`${base}/consent`, {
+  method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ accepted }),
+});
+```
+
+With tarteaucitron, declare a service whose `needConsent` is `requiresPriorConsent`, set its state from `consentAnswer` before `init`, and call `answer(true)` and `answer(false)` from its `js` and `fallback` callbacks. A regime without prior consent still shows the notice and a refusal.
+
+The relay emits from the server, so the visitor's network tab shows the posts to `{prefix}/events`, not the ingestion URL.
 
 ### Web: time zone of visitors
 
@@ -317,6 +378,8 @@ The client also does two things on its own:
 | `IAnalytics.Track(name, props?)` | `IReadOnlyDictionary<string, object?>` or `params (string, object?)[]`. Scalars only: string (≤64 chars), finite number, bool — and **enums, stored by name**. Max 12 per event. |
 | `IAnalytics.FlushAsync(ct)` | Sends what is queued and waits. |
 | `IAnalytics.Stats` | `Accepted` / `Rejected` / `Dropped` / `Sent` / `Requests`. |
+| `IInstallContext.ConsentAnswer` | `true` accepted, `false` refused, `null` not answered yet: whether to show the welcome popup. |
+| `IInstallContext.RequiresPriorConsent` | Whether the regime requires consent first, whatever the answer: whether the popup asks the consent question. |
 | `IAnalyticsContext.GetContext()` | The batch context, asked for on every event. Keys whitelisted per source under `context:`. |
 | `IAnalyticsTimeZone.GetLocalTime(utc)` | The instant as the visitor reads it on their own clock, per event; the client keeps its offset. On a server no HTTP header carries the zone, so the site supplies it (a cookie set by a script, for instance). Mobile uses the device's own zone. |
 | `InstallAge.Bucket(firstSeen, now)` | `0` / `1-7` / `8-30` / `31-90` / `90+`, for an app that segments on the age of an installation. |
@@ -328,7 +391,6 @@ The client also does two things on its own:
 | `MobileInstallIdentityProvider.Seed(InstallSeed)` | Adopts an existing installation, once. |
 | `MobileInstallIdentityProvider.Country` | The detected country. Set it to correct the region setting with a country the app reads better. |
 | `MobileInstallIdentityProvider.IsFirstRun` | What decides your own `first_open`. Stays false after an opposition followed by an acceptance. |
-| `MobileInstallIdentityProvider.ConsentAnswer` | `true` accepted, `false` refused, `null` not answered yet: whether to show the welcome popup. |
 
 
 ## Failure behavior

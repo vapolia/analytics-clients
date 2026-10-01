@@ -165,7 +165,7 @@ JS and .NET, where `IsDebugBuild = true` is a build switch rather than the conse
 
 A website serves every regime at once, so it decides per request, from the `Accept-Language` tag. No
 identity cookie is written until that visitor accepts. `AnalyticsWebOptions.RequiresPriorConsentForLocale`
-is where a site answers that itself.
+is where a site answers that itself. A JavaScript front end served by an ASP.NET Core backend reads the regime and the answer from the `GET state` endpoint of `MapAnalyticsRelay`.
 
 Both buttons carry the same style, the same size and the same prominence. A refusal placed one level
 below the acceptance is what the CNIL fined Google and Facebook for in 2021.

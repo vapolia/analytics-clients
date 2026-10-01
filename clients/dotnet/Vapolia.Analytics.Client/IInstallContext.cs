@@ -21,4 +21,17 @@ public interface IInstallContext
     /// Whether this installation, or this visitor, has opposed the measurement
     /// </summary>
     bool IsOptedOut { get; set; }
+
+    /// <summary>
+    /// The person's answer to the consent question: true accepted, false refused, null not answered
+    /// yet. While it is null, <see cref="IsOptedOut"/> equals <see cref="RequiresPriorConsent"/>.
+    /// </summary>
+    bool? ConsentAnswer { get; }
+
+    /// <summary>
+    /// Whether the regime of this installation, or of this request, requires consent before anything
+    /// is stored, whatever the person answered. What decides the consent question of the welcome
+    /// popup or the cookie banner.
+    /// </summary>
+    bool RequiresPriorConsent { get; }
 }

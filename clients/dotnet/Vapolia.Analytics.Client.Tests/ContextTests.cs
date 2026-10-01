@@ -181,6 +181,8 @@ public class BatchContextTests
         public string? InstallId => BatchContextTests.InstallId;
         public string? Country => "FR";
         public bool IsOptedOut { get; set; }
+        public bool? ConsentAnswer => null;
+        public bool RequiresPriorConsent => false;
     }
 
     sealed class Context(Func<IReadOnlyDictionary<string, object?>?> current) : IAnalyticsContext
@@ -292,6 +294,8 @@ public class TimeZoneTests
         public string? InstallId => TimeZoneTests.InstallId;
         public string? Country => "FR";
         public bool IsOptedOut { get; set; }
+        public bool? ConsentAnswer => null;
+        public bool RequiresPriorConsent => false;
     }
 
     sealed class FixedZone(int? minutes) : IAnalyticsTimeZone

@@ -25,32 +25,7 @@ public sealed class CookieInstallIdentityProvider(IHttpContextAccessor accessor,
     /// </summary>
     public bool IsOptedOut
     {
-        get
-        {
-            var context = accessor.HttpContext;
-            if (context is null)
-                return Unanswered();
-
-            // An answer given during this request outranks the cookie the request came with.
-            if (context.Items.TryGetValue(AnswerKey, out var answered) && answered is bool answer)
-                return answer;
-
-            return context.Request.Cookies[options.WebOptions.OptOutCookieName] switch
-            {
-                "1" => true,
-                "0" => false,
-                _ => Unanswered(),
-            };
-
-            bool Unanswered()
-            {
-                if (options.WebOptions.RequiresPriorConsentForLocale is { } byLocale)
-                    return byLocale(PreferredLanguage(context));
-
-                return options.RequiresPriorConsent
-                       ?? PriorConsentCountries.LocaleRequiresPriorConsent(PreferredLanguage(context));
-            }
-        }
+        get => ConsentAnswer is { } answer ? !answer : RequiresPriorConsent;
         set
         {
             var context = accessor.HttpContext;
@@ -60,7 +35,7 @@ public sealed class CookieInstallIdentityProvider(IHttpContextAccessor accessor,
                 return;
             }
 
-            context.Items[AnswerKey] = value;
+            context.Items[AnswerKey] = !value;
 
             if (value)
             {
@@ -105,6 +80,48 @@ public sealed class CookieInstallIdentityProvider(IHttpContextAccessor accessor,
         }
     }
 
+    /// <summary>
+    /// The visitor's answer: true accepted, false refused, null unanswered. Read from
+    /// <see cref="AnalyticsWebOptions.OptOutCookieName"/>, or from <see cref="IsOptedOut"/> when it was
+    /// set during this request.
+    /// </summary>
+    public bool? ConsentAnswer
+    {
+        get
+        {
+            var context = accessor.HttpContext;
+            if (context is null)
+                return null;
+
+            if (context.Items.TryGetValue(AnswerKey, out var answered) && answered is bool answer)
+                return answer;
+
+            return context.Request.Cookies[options.WebOptions.OptOutCookieName] switch
+            {
+                "1" => false,
+                "0" => true,
+                _ => null,
+            };
+        }
+    }
+
+    /// <summary>
+    /// Whether the regime of this request requires consent before anything is stored, whatever the
+    /// visitor answered. Reads <see cref="AnalyticsWebOptions.RequiresPriorConsentForLocale"/>, then
+    /// <see cref="AnalyticsOptions.RequiresPriorConsent"/>, then the regime of the
+    /// <c>Accept-Language</c> tag.
+    /// </summary>
+    public bool RequiresPriorConsent
+    {
+        get
+        {
+            var language = PreferredLanguage(accessor.HttpContext);
+            if (options.WebOptions.RequiresPriorConsentForLocale is { } byLocale)
+                return byLocale(language);
+
+            return options.RequiresPriorConsent ?? PriorConsentCountries.LocaleRequiresPriorConsent(language);
+        }
+    }
 
     /// <summary>
     /// Reads the cookie, creating it when the response has not started yet. Read by the middleware on
@@ -214,5 +231,5 @@ public sealed class CookieInstallIdentityProvider(IHttpContextAccessor accessor,
     internal Func<Sender?>? Sender { get; init; }
 
     const string ItemKey = "vapolia.analytics.installId";
-    const string AnswerKey = "vapolia.analytics.optedOut";
+    const string AnswerKey = "vapolia.analytics.consentAnswer";
 }
