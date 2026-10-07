@@ -195,14 +195,15 @@ never hardcoded across builds. Add a CI step before the app build:
 # GitHub Actions (permissions: id-token: write). The operator declares the audience.
 OIDC=$(curl -sH "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=<base-host>" | jq -r .value)
 # Codemagic: OIDC=$ANA_CI_TOKEN, a secret variable the operator issued.
-BUILD_TOKEN=$(curl -sf -X POST https://<base>/tokens/<source>/build -H "Authorization: Bearer $OIDC" \
+BUILD_TOKEN=$(curl -sf -X POST https://<base>/tokens/<source> -H "Authorization: Bearer $OIDC" \
   -H 'Content-Type: application/json' -d "{\"os\":\"android\",\"build\":\"$BUILD_NUMBER\"}" | jq -r .token)
 ```
 
 Pass it to the client as `token` (Kotlin `AnalyticsOptions`, Swift `AnalyticsOptions`, JS options) or
 `Token` (.NET), through the build system: a BuildConfig field, an Info.plist key, `app.config.ts`
 extra, an MSBuild property. `os` and `build` must be those of the binary. A website or a server sends
-no build token.
+a server token instead. The GitHub workflow that deploys it obtains one with the same call when the operator's rule for the
+repository names a server, and stores it in a secret read as `Token`.
 
 The platform, the build, the OS version, the locale and the store come from the build token only.
 Without one, a batch carries `country` alone, and the collector measures none of those axes for that build.
