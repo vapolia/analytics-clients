@@ -108,6 +108,9 @@ export async function start(options: AnalyticsOptions): Promise<void> {
     if (identity.isOptedOut()) await queue.clear();
 
     running.subscription = AppState.addEventListener('change', onAppStateChange);
+    // The launch is a foreground too, unless the process was started in the background.
+    wasActive = false;
+    if (AppState.currentState === 'active') onAppStateChange('active');
   })().finally(() => {
     starting = undefined;
   });
@@ -209,8 +212,8 @@ export function firstSeen(): number | undefined {
 }
 
 /**
- * The app returning to the foreground, and leaving it. It hangs off the AppState listener the client
- * already holds, rather than a second one.
+ * The app coming to the foreground, the launch included, and leaving it. It hangs off the AppState
+ * listener the client already holds, rather than a second one.
  */
 export const lifecycle: { onForeground?: () => void; onBackground?: () => void } = {};
 

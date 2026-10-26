@@ -6,7 +6,7 @@ namespace Vapolia.Analytics.Client;
 /// process, later calls are ignored.
 ///
 /// Backgrounding is the only moment iOS guarantees the process still runs, so it is where the queue
-/// has to leave; coming back is where <c>app_open</c> belongs.
+/// has to leave. Coming to the foreground, the launch included, is where <c>app_open</c> belongs.
 /// </summary>
 static class AppLifecycle
 {
@@ -25,17 +25,32 @@ static class AppLifecycle
     /// <summary>
     /// Counts started activities rather than trusting one of them: a rotation stops an activity and
     /// starts another, and treating that as a background trip would emit an app_open per rotation.
-    /// Foreground is raised only after a Background: the launch itself is not a return to the foreground.
+    /// Foreground is raised for the first activity of the process too, and not for a process started
+    /// by a service. A client started while an activity is already visible raises it at once.
     /// </summary>
-    sealed class Callbacks(Action onForeground, Action onBackground)
-        : Java.Lang.Object, Android.App.Application.IActivityLifecycleCallbacks
+    sealed class Callbacks : Java.Lang.Object, Android.App.Application.IActivityLifecycleCallbacks
     {
+        readonly Action onForeground, onBackground;
         int started;
-        bool backgrounded;
+
+        public Callbacks(Action onForeground, Action onBackground)
+        {
+            this.onForeground = onForeground;
+            this.onBackground = onBackground;
+
+            var state = new Android.App.ActivityManager.RunningAppProcessInfo();
+            Android.App.ActivityManager.GetMyMemoryState(state);
+            // Not ForegroundService, which is a process started by a service with no activity.
+            if (state.Importance is Android.App.Importance.Foreground or Android.App.Importance.Visible)
+            {
+                started = 1;
+                onForeground();
+            }
+        }
 
         public void OnActivityStarted(Android.App.Activity activity)
         {
-            if (started++ == 0 && backgrounded)
+            if (started++ == 0)
                 onForeground();
         }
 
@@ -44,7 +59,6 @@ static class AppLifecycle
             if (--started <= 0)
             {
                 started = 0;
-                backgrounded = true;
                 onBackground();
             }
         }
@@ -56,17 +70,43 @@ static class AppLifecycle
         public void OnActivitySaveInstanceState(Android.App.Activity activity, Android.OS.Bundle outState) { }
     }
 #elif IOS || MACCATALYST
-    static Foundation.NSObject? enteredBackground, willEnterForeground;
+    static Foundation.NSObject? enteredBackground, willEnterForeground, didBecomeActive;
+    static bool inForeground;
 
+    /// <summary>
+    /// Foreground is raised once per foreground period, on the first of WillEnterForeground and
+    /// DidBecomeActive. A cold launch posts only DidBecomeActive, a background launch neither until
+    /// the app is opened, and DidBecomeActive alone also follows a phone call or a pulled-down
+    /// notification centre. A client started while the app is already in the foreground raises it at once.
+    /// </summary>
     public static void Subscribe(Action onForeground, Action onBackground)
     {
         if (enteredBackground is not null)
             return;
 
         var center = Foundation.NSNotificationCenter.DefaultCenter;
-        enteredBackground = center.AddObserver(UIKit.UIApplication.DidEnterBackgroundNotification, _ => onBackground());
-        // Not DidBecomeActive, which also fires after a phone call or a pulled-down notification centre.
-        willEnterForeground = center.AddObserver(UIKit.UIApplication.WillEnterForegroundNotification, _ => onForeground());
+        enteredBackground = center.AddObserver(UIKit.UIApplication.DidEnterBackgroundNotification, _ =>
+        {
+            inForeground = false;
+            onBackground();
+        });
+        willEnterForeground = center.AddObserver(UIKit.UIApplication.WillEnterForegroundNotification, _ => Enter(onForeground));
+        didBecomeActive = center.AddObserver(UIKit.UIApplication.DidBecomeActiveNotification, _ => Enter(onForeground));
+
+        // The notifications are posted on the main thread, and ApplicationState is read there only.
+        Foundation.NSRunLoop.Main.BeginInvokeOnMainThread(() =>
+        {
+            if (UIKit.UIApplication.SharedApplication.ApplicationState != UIKit.UIApplicationState.Background)
+                Enter(onForeground);
+        });
+    }
+
+    static void Enter(Action onForeground)
+    {
+        if (inForeground)
+            return;
+        inForeground = true;
+        onForeground();
     }
 #else
     public static void Subscribe(Action onForeground, Action onBackground)

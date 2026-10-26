@@ -15,8 +15,7 @@ Analytics.context = { ["plan": .string(user.plan), "tutorial_done": .bool(progre
 
 // your own opens: the client names no event
 if Analytics.isFirstRun { Analytics.track("first_open"); Analytics.markSeen() }
-Analytics.track("app_open")
-Analytics.onForeground = { Analytics.track("app_open") }
+Analytics.onForeground = { Analytics.track("app_open") }   // the launch included
 
 // anywhere, from any thread
 Analytics.track("game_end", ["result": "win", "moves": 34])
@@ -45,7 +44,7 @@ are yours to name and to place, from `isFirstRun` and `onForeground` above.
 Swift Package Manager, iOS 15+ / macCatalyst 15+:
 
 ```swift
-.package(url: "https://github.com/vapolia/analytics-clients", from: "1.1.0")
+.package(url: "https://github.com/vapolia/analytics-clients", from: "1.2.0")
 ```
 
 then add `VapoliaAnalytics` to the target's dependencies. In Xcode: *File → Add Package
@@ -63,7 +62,7 @@ The manifest lives at the repository root because SwiftPM requires it there; the
 | Time zone | Each event carries the device offset in minutes east of UTC (`tz`), read at the instant of the event, apart from its UTC `ts`. |
 | `isFirstRun` | Whether the installation has been seen before, so *your* `first_open` fires once — kept apart from the id, so a renewal is not a new install. |
 | `firstSeen` | When the installation was first seen, kept across id renewals. Feed it to `InstallAge.bucket(firstSeen:now:)` for a `"0"` / `"1-7"` / `"8-30"` / `"31-90"` / `"90+"` bucket, if your source whitelists a key for it. |
-| `onForeground` / `onBackground` | `willEnterForeground` and `didEnterBackground`, from the observers the client already holds — not `didBecomeActive`, which also fires after a phone call or a pulled-down notification centre. |
+| `onForeground` / `onBackground` | `onForeground` fires once per foreground period, the launch included, on the first of `willEnterForeground` and `didBecomeActive`. A phone call or a pulled-down notification centre does not fire it again, and a background launch (location, Bluetooth restoration) fires it only when the app is opened. `onBackground` is `didEnterBackground`. Set `onForeground` right after `start`, before the launch completes. |
 | Background | On `didEnterBackground` the queue is sent and spooled, under a background task. |
 | Privacy manifest | The package ships its own `PrivacyInfo.xcprivacy`: no tracking, *Product Interaction* not linked to the user, purpose *Analytics*, `UserDefaults` reason `CA92.1`. |
 

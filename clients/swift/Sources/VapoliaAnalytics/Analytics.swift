@@ -26,6 +26,7 @@ public final class Analytics: @unchecked Sendable {
     private var batchContext: (@Sendable () -> [String: PropValue]?)?
     private var foregroundHandler: (@Sendable () -> Void)?
     private var backgroundHandler: (@Sendable () -> Void)?
+    private var inForeground = false
     private var observers: [NSObjectProtocol] = []
     private var warned = false
 
@@ -354,15 +355,26 @@ public final class Analytics: @unchecked Sendable {
         #if canImport(UIKit)
         let center = NotificationCenter.default
 
-        // willEnterForeground rather than didBecomeActive: the latter also fires after a phone call
-        // or a pulled-down notification centre, which are not app opens.
-        let foreground = center.addObserver(
-            forName: UIApplication.willEnterForegroundNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            self?.locked { self?.foregroundHandler }?()
+        // Once per foreground period, on the first of willEnterForeground and didBecomeActive. A cold
+        // launch posts only didBecomeActive, a background launch neither until the app is opened, and
+        // didBecomeActive alone also follows a phone call or a pulled-down notification centre.
+        let enterForeground: @Sendable (Notification) -> Void = { [weak self] _ in
+            guard let self else { return }
+            let handler: (@Sendable () -> Void)? = self.locked {
+                guard !self.inForeground else { return nil }
+                self.inForeground = true
+                return self.foregroundHandler
+            }
+            handler?()
         }
+        let willEnter = center.addObserver(
+            forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main,
+            using: enterForeground
+        )
+        let didBecomeActive = center.addObserver(
+            forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main,
+            using: enterForeground
+        )
 
         let background = center.addObserver(
             forName: UIApplication.didEnterBackgroundNotification,
@@ -370,7 +382,11 @@ public final class Analytics: @unchecked Sendable {
             queue: .main
         ) { [weak self] _ in
             guard let self else { return }
-            self.locked { self.backgroundHandler }?()
+            let handler: (@Sendable () -> Void)? = self.locked {
+                self.inForeground = false
+                return self.backgroundHandler
+            }
+            handler?()
             guard app.flushesOnBackground else { return }
             // Delivered on the main queue, but the closure is not main-actor isolated and iOS 15
             // predates `MainActor.assumeIsolated`: hop explicitly rather than assert.
@@ -378,7 +394,7 @@ public final class Analytics: @unchecked Sendable {
         }
 
         lock.lock()
-        observers = [foreground, background]
+        observers = [willEnter, didBecomeActive, background]
         lock.unlock()
         #endif
     }

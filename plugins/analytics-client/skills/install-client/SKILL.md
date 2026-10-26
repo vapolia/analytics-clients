@@ -88,19 +88,18 @@ and what is counted from them is decided where the numbers are read.
 | Question | What the app sends |
 |---|---|
 | How many installations opened the app for the first time | `first_open`, once per installation, on the client's first-run flag, followed by `markSeen()`. The .NET client has no `markSeen()`: its `IsFirstRun` turns false once the id is issued. |
-| How many openings | `app_open`, at start and on each return to the foreground, from the client's lifecycle hook. |
+| How many openings | `app_open`, from the client's foreground hook, which fires for the launch and for each return to the foreground. |
 | What people do first after opening | Nothing new: the actions the app already sends. The first one after an `app_open` is read out of the sequence, not marked at the call site. |
 
-```swift
-if Analytics.isFirstRun { Analytics.track("first_open"); Analytics.markSeen() }
-Analytics.track("app_open")
+```kotlin
+if (Analytics.isFirstRun) { Analytics.track("first_open"); Analytics.markSeen() }
 Analytics.onForeground = { Analytics.track("app_open") }
 ```
 
-The same three lines exist in the Swift, JS and .NET READMEs, under their own spelling: their
-foreground hook is not raised for the launch. Kotlin has two lines only: `onForeground` also fires for
-the first activity of the process, so it covers the launch, and a process started by a service with no
-activity counts no open. Emitting `first_open` without `markSeen()` sends it again at the next launch.
+The same two lines exist in every client's README, under its own spelling. Never send `app_open`
+explicitly at start: a process launched in the background (an Android service, an iOS location or
+Bluetooth relaunch) is not an open, and the hook fires only once the app is opened. Emitting
+`first_open` without `markSeen()` sends it again at the next launch.
 
 ## The welcome popup
 

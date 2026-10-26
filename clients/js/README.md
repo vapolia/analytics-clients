@@ -16,8 +16,7 @@ void Analytics.start({
 
 // your own opens: the client names no event
 if (Analytics.isFirstRun()) { Analytics.track('first_open'); await Analytics.markSeen(); }
-Analytics.track('app_open');
-Analytics.lifecycle.onForeground = () => Analytics.track('app_open');
+Analytics.lifecycle.onForeground = () => Analytics.track('app_open'); // the launch included
 
 // anywhere
 Analytics.track('game_end', { result: 'win', moves: 34 });
@@ -92,7 +91,7 @@ without a store release.
 |---|---|
 | Installation id | A random v4 UUID in AsyncStorage, renewed after 390 days — the 13-month ceiling, with a margin for clock drift. **Not** in SecureStore/keychain: those survive the app being deleted, which would make the id outlive the installation it names. |
 | `isFirstRun()` | Whether the installation has been seen before, so *your* `first_open` fires once — kept apart from the id, so a renewal is not a new install. |
-| `lifecycle.onForeground` / `onBackground` | The `AppState` transitions the client already listens to in order to flush and spool. |
+| `lifecycle.onForeground` / `onBackground` | The `AppState` transitions the client already listens to in order to flush and spool. `onForeground` also fires when `start` resolves with the app active, and a background launch fires it only when the app is opened. |
 | Device context | `country`, and only `country`: the **region setting**, never a geolocation. The platform, the build, the OS version, the device class and the store come from the `Authorization` token — see the [contract](https://github.com/vapolia/analytics-clients/blob/main/clients/README.md#payload). |
 | Time zone | Each event carries the device offset in minutes east of UTC (`tz`), read at the instant of the event, apart from its UTC `ts`. |
 | Spool | The queue is written to storage ~500 ms after each event, and read back once on the next launch. |

@@ -51,8 +51,7 @@ public sealed class GameViewModel(IAnalytics analytics)
 // IsFirstRun is on MobileInstallIdentityProvider, the IInstallContext registered for an app.
 if (identity is MobileInstallIdentityProvider { IsFirstRun: true })
     analytics.Track("first_open");
-analytics.Track("app_open");
-lifecycle.Foreground += () => analytics.Track("app_open"); // not raised for the launch itself
+lifecycle.Foreground += () => analytics.Track("app_open"); // the launch included
 ```
 
 
@@ -64,7 +63,7 @@ lifecycle.Foreground += () => analytics.Track("app_open"); // not raised for the
 | First-seen date | Kept across renewals |
 | `FirstSeen` | When the installation was first measured, kept across renewals.  |
 | `IsFirstRun` | Whether the installation has been seen before, so *your* `first_open` is emitted once and a renewal does not count as a new install. |
-| `IAppLifecycle` | Foreground and background, from the one platform subscription the client already holds — Android's rotation guard included. |
+| `IAppLifecycle` | Foreground and background, from the one platform subscription the client already holds — Android's rotation guard included. `Foreground` is raised for the launch too, and handed to the first subscriber if it came before. A process launched in the background (an Android service, an iOS location or Bluetooth relaunch) raises it only when the app is opened. |
 | Background | On Android's last activity stopping and on iOS's `DidEnterBackground`, the queue is sent and spooled. |
 | Device context | `country` alone, from **`RegionInfo.CurrentRegion`** (the region setting, not the language). The platform and the build come from the build token. |
 | Time zone | Each event carries the device offset in minutes east of UTC (`tz`), read at the instant of the event, apart from its UTC `ts`. |
