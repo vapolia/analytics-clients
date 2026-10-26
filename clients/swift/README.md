@@ -45,7 +45,7 @@ are yours to name and to place, from `isFirstRun` and `onForeground` above.
 Swift Package Manager, iOS 15+ / macCatalyst 15+:
 
 ```swift
-.package(url: "https://github.com/vapolia/analytics-clients", from: "1.0.0")
+.package(url: "https://github.com/vapolia/analytics-clients", from: "1.1.0")
 ```
 
 then add `VapoliaAnalytics` to the target's dependencies. In Xcode: *File → Add Package
@@ -78,6 +78,8 @@ The queue is sent and written down when the app backgrounds, on its own, inside 
 | `Analytics.track(_:_:)` | `Analytics.track("theme_apply", ["night": true])`. Props are `PropValue` — string, number or bool — and take literals. |
 | `Analytics.flush()` / `await Analytics.flushAndWait()` | Send what is queued, without / with waiting. |
 | `Analytics.isOptedOut` | The right of opposition. Before any answer it follows `requiresPriorConsent`; setting it drops the queue and forgets the id. |
+| `Analytics.consentAnswer` | True accepted, false refused, nil not answered yet. Nil before `start`. |
+| `Analytics.requiresPriorConsent` | The option, or the device locale's regime when the option is nil. |
 | `Analytics.installId` | The current id, for a support screen. Nil when opted out. |
 | `Analytics.stats` | `accepted` / `rejected` / `dropped` / `sent` / `requests`. |
 | `Analytics.context` | What is true of the installation for a whole batch, read again for every event. Every key must be on the source's `context` whitelist. |
@@ -114,7 +116,7 @@ Depending on the country, consent may need to be given before the client starts 
 This is controlled by the `requiresPriorConsent` option.
 Which countries require this prior consent, and what the popup says, are in
 [OBLIGATIONS.md](https://github.com/vapolia/analytics-clients/blob/main/clients/OBLIGATIONS.md).
-This option is only used while the person has not answered, so an acceptance survives the next launch.
+This option is only used while the person has not answered, which `consentAnswer` reports as nil.
 
 When `requiresPriorConsent` is nil, the client answers with a built-in default, as a convenience.
 **That default must not be taken as a legal basis: the choice stays yours, and so does the liability for it.**
@@ -125,6 +127,9 @@ Analytics.start(AnalyticsOptions(
     ingestionUrl: url,
     requiresPriorConsent: yourRequiresPriorConsent(locale)   // default is localeRequiresPriorConsent()
 ))
+
+// show the popup while the question is unanswered
+if Analytics.consentAnswer == nil { showWelcomePopup(asksConsent: Analytics.requiresPriorConsent) }
 
 // the popup's two buttons
 onAccept = { Analytics.isOptedOut = false }

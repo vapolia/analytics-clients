@@ -153,13 +153,18 @@ Analytics.start(this, AnalyticsOptions(
     requiresPriorConsent = null,   // the table above, read from the device locale
 ))
 
+// show the popup while the question is unanswered, with the question if the regime asks first
+if (Analytics.consentAnswer == null) showWelcomePopup(asksConsent = Analytics.requiresPriorConsent)
+
 // the popup's two buttons
 onAccept = { Analytics.isOptedOut = false }
 onRefuse = { Analytics.isOptedOut = true }
 ```
 
-`requiresPriorConsent` applies only while the person has not answered, so an acceptance survives the next
-launch. Calling `start()` before the answer writes nothing to the device and sends nothing; the
+`requiresPriorConsent` applies only while the person has not answered, which `consentAnswer` reports as
+null, so an acceptance survives the next launch. Every client exposes both: `consentAnswer` and
+`requiresPriorConsent` in Kotlin and Swift, `consentAnswer()` in JS, `ConsentAnswer` and
+`RequiresPriorConsent` on `IInstallContext` in .NET. Calling `start()` before the answer writes nothing to the device and sends nothing; the
 acceptance resumes collection with no restart. The same option and the same property exist in Swift,
 JS and .NET, where `IsDebugBuild = true` is a build switch rather than the consent gate.
 

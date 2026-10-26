@@ -57,6 +57,21 @@ final class IdentityTests: XCTestCase {
         XCTAssertEqual(next.current(), id)
     }
 
+    func testConsentAnswerIsNilUntilAnsweredThenFollowsTheAnswer() {
+        let clock = Clock(Date(timeIntervalSince1970: 1_700_000_000))
+        let identity = identity(now: clock.read, refusalLifetime: 100, requiresPriorConsent: true)
+        XCTAssertNil(identity.consentAnswer)
+
+        identity.isOptedOut = false
+        XCTAssertEqual(identity.consentAnswer, true)
+
+        identity.isOptedOut = true
+        XCTAssertEqual(identity.consentAnswer, false)
+
+        clock.advance(101)
+        XCTAssertNil(identity.consentAnswer, "a lapsed refusal asks the question again")
+    }
+
     func testTheIdIsReissuedOnceItsLifetimeIsSpent() {
         let start = Date(timeIntervalSince1970: 1_700_000_000)
         let clock = Clock(start)

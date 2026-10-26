@@ -232,6 +232,18 @@ public final class Analytics: @unchecked Sendable {
         }
     }
 
+    /// The person's answer to the consent question: true accepted, false refused, nil not answered
+    /// yet. Show the welcome popup while it is nil. Nil before ``start(_:)``.
+    public static var consentAnswer: Bool? {
+        shared.currentIdentity?.consentAnswer
+    }
+
+    /// ``AnalyticsOptions/requiresPriorConsent``, or the regime of the device locale when that is nil.
+    /// What decides the consent question of the welcome popup. Before ``start(_:)``, the locale's regime.
+    public static var requiresPriorConsent: Bool {
+        shared.currentIdentity?.requiresPriorConsent ?? localeRequiresPriorConsent(DeviceProbe.currentLocale)
+    }
+
     /// The current installation id, for a support screen. Nil when opted out or not started.
     public static var installId: String? {
         guard let identity = shared.currentIdentity, !identity.isOptedOut else { return nil }

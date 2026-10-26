@@ -139,6 +139,22 @@ object Analytics {
             if (value) client?.clear(DEFAULT_TIMEOUT_MS)
         }
 
+    /**
+     * The person's answer to the consent question: true accepted, false refused, null not answered
+     * yet. Show the welcome popup while it is null. Null before [start].
+     */
+    @JvmStatic
+    val consentAnswer: Boolean?
+        get() = identity?.consentAnswer()
+
+    /**
+     * [AnalyticsOptions.requiresPriorConsent], or the regime of the device locale when that is null.
+     * What decides the consent question of the welcome popup. Before [start], the locale's regime.
+     */
+    @JvmStatic
+    val requiresPriorConsent: Boolean
+        get() = identity?.requiresPriorConsent ?: localeRequiresPriorConsent(DeviceProbe.currentLocale())
+
     /** The current installation id, for a support screen. Null when opted out or not started. */
     @JvmStatic
     val installId: String?

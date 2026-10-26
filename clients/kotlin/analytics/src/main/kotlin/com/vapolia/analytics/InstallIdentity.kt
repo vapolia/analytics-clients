@@ -12,7 +12,7 @@ internal class InstallIdentity(
     private val clock: () -> Long = System::currentTimeMillis,
     private val idLifetimeMs: Long = DEFAULT_LIFETIME_MS,
     private val refusalLifetimeMs: Long = DEFAULT_LIFETIME_MS,
-    private val requiresPriorConsent: Boolean = false,
+    val requiresPriorConsent: Boolean = false,
 ) {
     /** The current id, reissued when the old one reached its ceiling. */
     fun current(): String {
@@ -66,6 +66,12 @@ internal class InstallIdentity(
 
     /** Whether the person has answered the measurement question, either way. */
     fun answered(): Boolean = prefs.contains(KEY_OPTED_OUT)
+
+    /** True accepted, false refused, null not answered yet. A lapsed refusal reads as not answered. */
+    fun consentAnswer(): Boolean? {
+        val optedOut = isOptedOut
+        return if (answered()) !optedOut else null
+    }
 
     /**
      * A refusal is remembered for [refusalLifetimeMs] and — unlike the identifier — refreshed on

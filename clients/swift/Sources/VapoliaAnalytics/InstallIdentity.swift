@@ -9,7 +9,7 @@ final class InstallIdentity: @unchecked Sendable {
     private let now: @Sendable () -> Date
     private let idLifetime: TimeInterval
     private let refusalLifetime: TimeInterval
-    private let requiresPriorConsent: Bool
+    let requiresPriorConsent: Bool
     private let lock = NSLock()
 
     init(
@@ -29,6 +29,12 @@ final class InstallIdentity: @unchecked Sendable {
     /// Whether the person has answered the measurement question, either way.
     var answered: Bool {
         defaults.object(forKey: Keys.optedOut) != nil
+    }
+
+    /// True accepted, false refused, nil not answered yet. A lapsed refusal reads as not answered.
+    var consentAnswer: Bool? {
+        let optedOut = isOptedOut
+        return answered ? !optedOut : nil
     }
 
     /// Takes an identity issued elsewhere, unless this installation already has one. Returns whether

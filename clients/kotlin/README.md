@@ -6,7 +6,7 @@ A dependency-free Android client for the collector (`POST {endpoint}/{source}`).
 
 ```kotlin
 // build.gradle.kts
-implementation("com.vapolia.analytics:analytics:1.0.0")
+implementation("com.vapolia.analytics:analytics:1.1.0")
 
 // Application.onCreate
 Analytics.start(this, ingestionUrl = "https://analytics.example.com/<sourceName>")
@@ -47,7 +47,7 @@ are yours to name and to place, from `isFirstRun` and `onForeground` above.
 repositories { mavenCentral() }
 
 dependencies {
-    implementation("com.vapolia.analytics:analytics:1.0.0")
+    implementation("com.vapolia.analytics:analytics:1.1.0")
 }
 ```
 
@@ -77,6 +77,8 @@ The queue is sent and written down when the app goes to the background, on its o
 | `track(name, props: Map<String, Any?>?)` | Same, for a map built elsewhere. |
 | `flush()` / `flushBlocking(timeoutMs)` | Send what is queued, without / with waiting. |
 | `isOptedOut` | The right of opposition. Before any answer it follows `requiresPriorConsent`; setting it drops the queue and forgets the id. |
+| `consentAnswer` | True accepted, false refused, null not answered yet. Null before `start`. |
+| `requiresPriorConsent` | The option, or the device locale's regime when the option is null. |
 | `installId` | The current id, for a support screen. Null when opted out. |
 | `stats` | `accepted` / `rejected` / `dropped` / `sent` / `requests`. |
 | `context = { map }` | What is true of the installation for a whole batch, read again for every event. Every key must be on the source's `context` whitelist. |
@@ -113,7 +115,7 @@ Depending on the country, consent may need to be given before the client starts 
 This is controlled by the `requiresPriorConsent` option.
 Which countries require this prior consent, and what the popup says, are in
 [OBLIGATIONS.md](https://github.com/vapolia/analytics-clients/blob/main/clients/OBLIGATIONS.md).
-This option is only used while the person has not answered, so an acceptance survives the next launch.
+This option is only used while the person has not answered, which `consentAnswer` reports as null.
 
 When `requiresPriorConsent` is null, the client answers with a built-in default, as a convenience.
 **That default must not be taken as a legal basis: the choice stays yours, and so does the liability for it.**
@@ -124,6 +126,9 @@ Analytics.start(this, AnalyticsOptions(
     ingestionUrl = "https://analytics.example.com/myapp",
     requiresPriorConsent = yourRequiresPriorConsent(locale),   // default is localeRequiresPriorConsent()
 ))
+
+// show the popup while the question is unanswered
+if (Analytics.consentAnswer == null) showWelcomePopup(asksConsent = Analytics.requiresPriorConsent)
 
 // the popup's two buttons
 onAccept = { Analytics.isOptedOut = false }
