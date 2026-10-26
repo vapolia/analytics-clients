@@ -93,7 +93,9 @@ public static class MobileAnalytics
             sender = started;
             startedOptions = options;
             Identity = identity;
-            current = new Analytics(started, identity, context, options, timeZone ?? new DeviceTimeZone());
+            var analytics = new Analytics(started, identity, context, options, timeZone ?? new DeviceTimeZone(), holdsUnanswered: true);
+            identity.Answered = analytics.Answered;
+            current = analytics;
 
             AppLifecycle.Subscribe(OnForeground, OnBackground);
             return current;

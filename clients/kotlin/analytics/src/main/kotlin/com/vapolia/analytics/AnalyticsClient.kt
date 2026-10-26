@@ -57,6 +57,7 @@ internal class AnalyticsClient(
         name: String,
         props: Map<String, Any?>?,
         context: String = "{}",
+        at: Long? = null,
     ) {
         if (!withinRate()) {
             dropped.incrementAndGet()
@@ -79,7 +80,7 @@ internal class AnalyticsClient(
 
         held.incrementAndGet()
         accepted.incrementAndGet()
-        val now = clock()
+        val now = at ?: clock()
         commands.add(
             Command.Add(
                 Pending(

@@ -27,6 +27,12 @@ public final class Analytics: @unchecked Sendable {
     private var foregroundHandler: (@Sendable () -> Void)?
     private var backgroundHandler: (@Sendable () -> Void)?
     private var inForeground = false
+
+    /// What was tracked while the consent question is unanswered, in memory only: nothing is written
+    /// and nothing is sent before an acceptance, which sends it. A refusal or the end of the process
+    /// drops it. A ``markSeen()`` made meanwhile waits for the same answer.
+    private var awaiting: [(name: String, props: [String: PropValue], context: [String: PropValue], at: Date)] = []
+    private var awaitingMarkSeen = false
     private var observers: [NSObjectProtocol] = []
     private var warned = false
 
@@ -161,8 +167,32 @@ public final class Analytics: @unchecked Sendable {
             return
         }
 
-        guard !identity.isOptedOut else { return }
+        guard !identity.isOptedOut else {
+            if !identity.answered {
+                let context = currentContext?() ?? [:]
+                locked {
+                    if awaiting.count < Limits.maxEventsPerBatch {
+                        awaiting.append((name, props, context, Date()))
+                    }
+                }
+            }
+            return
+        }
 
+        send(name, props, context: currentContext?() ?? [:], at: Date(), sender: sender, identity: identity, options: options, counters: counters, device: device)
+    }
+
+    private func send(
+        _ name: String,
+        _ props: [String: PropValue],
+        context: [String: PropValue],
+        at now: Date,
+        sender: Sender,
+        identity: InstallIdentity,
+        options: AnalyticsOptions,
+        counters: Counters,
+        device: Device
+    ) {
         guard counters.withinRate(
             limit: options.advanced.maxEventsPerWindow,
             window: options.advanced.rateWindow,
@@ -186,12 +216,11 @@ public final class Analytics: @unchecked Sendable {
             return
         }
 
-        let now = Date()
         let pending = Pending(
             key: BatchKey(
                 installId: installId,
                 device: cleanDevice,
-                context: Clean.props(batchContext?() ?? [:], maxKeys: Limits.maxContextKeys)
+                context: Clean.props(context, maxKeys: Limits.maxContextKeys)
             ),
             event: Event(
                 name: eventName,
@@ -225,10 +254,28 @@ public final class Analytics: @unchecked Sendable {
         get { shared.currentIdentity?.isOptedOut ?? false }
         set {
             guard let identity = shared.currentIdentity else { return }
+            let unanswered = !identity.answered
             identity.isOptedOut = newValue
+
+            let (held, markSeen) = shared.locked {
+                defer { shared.awaiting = []; shared.awaitingMarkSeen = false }
+                return (shared.awaiting, shared.awaitingMarkSeen)
+            }
             if newValue {
                 let sender = shared.currentSender
                 Task { await sender?.clear() }
+                return
+            }
+            guard unanswered else { return }
+
+            // The acceptance of an unanswered question sends what this launch tracked meanwhile.
+            if markSeen { identity.markFirstOpenSent() }
+            shared.lock.lock()
+            let sender = shared.sender, options = shared.options, counters = shared.counters, device = shared.device
+            shared.lock.unlock()
+            guard let sender, let options else { return }
+            for event in held {
+                shared.send(event.name, event.props, context: event.context, at: event.at, sender: sender, identity: identity, options: options, counters: counters, device: device)
             }
         }
     }
@@ -284,7 +331,15 @@ public final class Analytics: @unchecked Sendable {
 
     /// Records that the installation has been seen. Call it once you emitted your own `first_open`.
     public static func markSeen() {
-        shared.currentIdentity?.markFirstOpenSent()
+        guard let identity = shared.currentIdentity else { return }
+        guard identity.isOptedOut else {
+            identity.markFirstOpenSent()
+            return
+        }
+        // Opted out, the first_open just tracked was dropped: the next measured launch is the first.
+        if !identity.answered {
+            shared.locked { shared.awaitingMarkSeen = true }
+        }
     }
 
     /// When this installation was first seen, kept across id renewals. Feed it to ``InstallAge`` if

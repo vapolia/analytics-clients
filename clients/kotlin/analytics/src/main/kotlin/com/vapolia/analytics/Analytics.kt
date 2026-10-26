@@ -26,6 +26,15 @@ object Analytics {
     @Volatile private var device: Device = Device()
 
     /**
+     * What was tracked while the consent question is unanswered, in memory only: nothing is written
+     * and nothing is sent before an acceptance, which sends it. A refusal or the end of the process
+     * drops it. A [markSeen] made meanwhile waits for the same answer.
+     */
+    private class Awaiting(val name: String, val props: Map<String, Any?>?, val context: String, val at: Long)
+    private val awaiting = ArrayList<Awaiting>()
+    private var awaitingMarkSeen = false
+
+    /**
      * What is true of the installation for a whole batch. Read again for every event, so an event
      * carries the state it was produced under. Every key must be on the source's `context` whitelist.
      */
@@ -105,7 +114,14 @@ object Analytics {
             return
         }
 
-        if (installIdentity.isOptedOut) return
+        if (installIdentity.isOptedOut) {
+            if (!installIdentity.answered())
+                synchronized(awaiting) {
+                    if (awaiting.size < MAX_EVENTS_PER_BATCH)
+                        awaiting += Awaiting(name, props, encodeContext(context?.invoke(), contextEncoder), System.currentTimeMillis())
+                }
+            return
+        }
         val batchContext = encodeContext(context?.invoke(), contextEncoder)
         sender.track(installIdentity.current(), device, name, props, batchContext)
     }
@@ -135,8 +151,23 @@ object Analytics {
         get() = identity?.isOptedOut ?: false
         set(value) {
             val installIdentity = identity ?: return
+            val unanswered = !installIdentity.answered()
             installIdentity.isOptedOut = value
-            if (value) client?.clear(DEFAULT_TIMEOUT_MS)
+
+            val (held, markSeen) = synchronized(awaiting) {
+                (awaiting.toList() to awaitingMarkSeen).also { awaiting.clear(); awaitingMarkSeen = false }
+            }
+            if (value) {
+                client?.clear(DEFAULT_TIMEOUT_MS)
+                return
+            }
+            if (!unanswered) return
+
+            // The acceptance of an unanswered question sends what this launch tracked meanwhile.
+            if (markSeen) installIdentity.markSeen()
+            val sender = client ?: return
+            for (event in held)
+                sender.track(installIdentity.current(), device, event.name, event.props, event.context, event.at)
         }
 
     /**
@@ -184,7 +215,14 @@ object Analytics {
     /** Records that the installation has been seen. Call it once you emitted your own `first_open`. */
     @JvmStatic
     fun markSeen() {
-        identity?.markSeen()
+        val installIdentity = identity ?: return
+        if (!installIdentity.isOptedOut) {
+            installIdentity.markSeen()
+            return
+        }
+        // Opted out, the first_open just tracked was dropped: the next measured launch is the first.
+        if (!installIdentity.answered())
+            synchronized(awaiting) { awaitingMarkSeen = true }
     }
 
     /**

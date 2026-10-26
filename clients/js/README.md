@@ -159,6 +159,8 @@ const onAccept = () => Analytics.setOptedOut(false);
 const onRefuse = () => Analytics.setOptedOut(true);
 ```
 
+Until the answer, every `track` is held in memory, at most 100 events, and nothing is written or sent. An acceptance sends them with their original time, and applies a `markSeen()` made meanwhile. A refusal, or the end of the process before any answer, drops them. The app tracks its `first_open` and `app_open` the same way in every regime and sends nothing again after the answer. Once the person has refused, every `track` is dropped.
+
 With `requiresPriorConsent` left null, an app that has no popup yet collects nothing in the countries that require prior consent.
 
 ## Failure behaviour

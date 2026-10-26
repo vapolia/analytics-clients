@@ -5,11 +5,55 @@ sealed class Analytics(
     IInstallContext identity,
     IAnalyticsContext? context = null,
     AnalyticsOptions? options = null,
-    IAnalyticsTimeZone? timeZone = null) : IAnalytics
+    IAnalyticsTimeZone? timeZone = null,
+    bool holdsUnanswered = false) : IAnalytics
 {
+    /// <summary>
+    /// What was tracked while the consent question is unanswered, in memory only: nothing is written
+    /// and nothing is sent before an acceptance, which sends it through <see cref="Answered"/>. A
+    /// refusal or the end of the process drops it. An app only, never a website, whose identity is
+    /// per visitor.
+    /// </summary>
+    readonly List<(string Name, IReadOnlyDictionary<string, object?>? Props, string Context, DateTimeOffset At, int? Tz)>? awaiting
+        = holdsUnanswered ? [] : null;
+
     public AnalyticsStats Stats => sender.Stats;
 
     public void Track(string name, IReadOnlyDictionary<string, object?>? props = null)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var tz = OffsetOf(timeZone?.GetLocalTime(now));
+
+        if (awaiting is not null && identity.ConsentAnswer is null && identity.IsOptedOut)
+        {
+            lock (awaiting)
+                if (awaiting.Count < Clean.MaxEventsPerBatch)
+                    awaiting.Add((name, props, CurrentContext(), now, tz));
+            return;
+        }
+
+        Send(name, props, CurrentContext(), now, tz);
+    }
+
+    /// <summary>The answer to an unanswered question: an acceptance sends what was held, a refusal drops it.</summary>
+    internal void Answered(bool accepted)
+    {
+        if (awaiting is null)
+            return;
+
+        (string Name, IReadOnlyDictionary<string, object?>? Props, string Context, DateTimeOffset At, int? Tz)[] held;
+        lock (awaiting)
+        {
+            held = [.. awaiting];
+            awaiting.Clear();
+        }
+
+        if (accepted)
+            foreach (var e in held)
+                Send(e.Name, e.Props, e.Context, e.At, e.Tz);
+    }
+
+    void Send(string name, IReadOnlyDictionary<string, object?>? props, string batchContext, DateTimeOffset at, int? tz)
     {
         var installId = Clean.InstallId(identity.InstallId);
         var eventName = Clean.Text(name, Clean.MaxValueLength);
@@ -21,12 +65,9 @@ sealed class Analytics(
             return;
         }
 
-        var now = DateTimeOffset.UtcNow;
-        var local = timeZone?.GetLocalTime(now);
-
         sender.Track(new Pending(
-            new BatchKey(installId, device, CurrentContext()),
-            new Event(eventName.ToString(), now, Clean.Props(props), OffsetOf(local))));
+            new BatchKey(installId, device, batchContext),
+            new Event(eventName.ToString(), at, Clean.Props(props), tz)));
     }
 
     /// <summary>

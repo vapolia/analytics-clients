@@ -78,7 +78,7 @@ export class Queue {
    * Queues one event. Never blocks, never throws, never reports an error. `getStats` is where losses
    * show up.
    */
-  track(device: Device, name: string, props?: Props, context?: Props): void {
+  track(device: Device, name: string, props?: Props, context?: Props, at?: number): void {
     if (this.stopped) return;
 
     if (!this.withinRate()) {
@@ -103,7 +103,7 @@ export class Queue {
     }
 
     this.stats.accepted += 1;
-    const ts = this.now();
+    const ts = at ?? this.now();
     // Minutes east of UTC. getTimezoneOffset() answers the opposite — UTC minus local — hence the sign.
     const event: AnalyticsEvent = { name: eventName, ts, props: cleanProps(props), tz: -new Date(ts).getTimezoneOffset() };
     const cleanedContext = cleanProps(context, MAX_CONTEXT_KEYS);

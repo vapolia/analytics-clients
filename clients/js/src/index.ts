@@ -1,5 +1,6 @@
 import { AppState, type AppStateStatus, type NativeEventSubscription } from 'react-native';
 
+import { MAX_EVENTS_PER_BATCH } from './core/clean';
 import { localeRequiresPriorConsent } from './core/consent';
 import { Identity } from './core/identity';
 import { Queue } from './core/queue';
@@ -40,6 +41,14 @@ let running: Running | undefined;
 let device: Device = {};
 let starting: Promise<void> | undefined;
 let warned = false;
+
+/**
+ * What was tracked while the consent question is unanswered, in memory only: nothing is written and
+ * nothing is sent before an acceptance, which sends it. A refusal or the end of the process drops it.
+ * A `markSeen()` made meanwhile waits for the same answer.
+ */
+let awaiting: { name: string; props?: Props; context?: Context; at: number }[] = [];
+let awaitingMarkSeen = false;
 
 /**
  * Starts the client. Call it once, as early as possible — awaiting it is optional: events tracked
@@ -131,7 +140,11 @@ export function track(name: string, props?: Props): void {
     return;
   }
 
-  if (running.identity.isOptedOut()) return;
+  if (running.identity.isOptedOut()) {
+    if (running.identity.consentAnswer() === null && awaiting.length < MAX_EVENTS_PER_BATCH)
+      awaiting.push({ name, props, context: running.context(), at: Date.now() });
+    return;
+  }
   running.queue.track(device, name, props, running.context());
 }
 
@@ -144,6 +157,8 @@ export async function flush(): Promise<void> {
 export async function stop(): Promise<void> {
   const current = running;
   running = undefined;
+  awaiting = [];
+  awaitingMarkSeen = false;
   current?.subscription?.remove();
   await current?.queue.stop();
 }
@@ -155,8 +170,23 @@ export async function stop(): Promise<void> {
 export async function setOptedOut(value: boolean): Promise<void> {
   if (!running) return;
 
-  await running.identity.setOptedOut(value);
-  if (value) await running.queue.clear();
+  const current = running;
+  const unanswered = current.identity.consentAnswer() === null;
+  const held = awaiting;
+  const markSeen = awaitingMarkSeen;
+  awaiting = [];
+  awaitingMarkSeen = false;
+
+  await current.identity.setOptedOut(value);
+  if (value) {
+    await current.queue.clear();
+    return;
+  }
+  if (!unanswered) return;
+
+  // The acceptance of an unanswered question sends what this launch tracked meanwhile.
+  if (markSeen) await current.identity.markFirstOpenSent();
+  for (const event of held) current.queue.track(device, event.name, event.props, event.context, event.at);
 }
 
 export function isOptedOut(): boolean {
@@ -200,7 +230,13 @@ export function isFirstRun(): boolean {
 
 /** Records that the installation has been seen. Call it once you emitted your own `first_open`. */
 export async function markSeen(): Promise<void> {
-  await running?.identity.markFirstOpenSent();
+  if (!running) return;
+  if (!running.identity.isOptedOut()) {
+    await running.identity.markFirstOpenSent();
+    return;
+  }
+  // Opted out, the first_open just tracked was dropped: the next measured launch is the first.
+  if (running.identity.consentAnswer() === null) awaitingMarkSeen = true;
 }
 
 /**

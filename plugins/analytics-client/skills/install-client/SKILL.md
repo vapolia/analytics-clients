@@ -166,7 +166,14 @@ onRefuse = { Analytics.isOptedOut = true }
 null, so an acceptance survives the next launch. Every client exposes both: `consentAnswer` and
 `requiresPriorConsent` in Kotlin and Swift, `consentAnswer()` in JS, `ConsentAnswer` and
 `RequiresPriorConsent` on `IInstallContext` in .NET. Calling `start()` before the answer writes nothing to the device and sends nothing; the
-acceptance resumes collection with no restart. The same option and the same property exist in Swift,
+acceptance resumes collection with no restart.
+
+In an app, every `track` made before the answer is held in memory, at most 100 events, and never
+written or sent. An acceptance sends them with their original time, and applies a `markSeen()` made
+meanwhile. A refusal, or the end of the process before any answer, drops them. The opens code above
+therefore runs unchanged in every regime, and the app sends nothing again after the answer. Once the
+person has refused, every `track` is dropped. A website holds nothing: a visitor's events before
+the answer are dropped. The same option and the same property exist in Swift,
 JS and .NET, where `IsDebugBuild = true` is a build switch rather than the consent gate.
 
 A website serves every regime at once, so it decides per request, from the `Accept-Language` tag. No

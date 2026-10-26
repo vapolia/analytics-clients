@@ -48,8 +48,10 @@ sealed class MobileInstallContext : IMobileInstallContext
         };
         set
         {
+            bool unanswered;
             lock (gate)
             {
+                unanswered = Preferences.Get(KeyOptedOut) is null;
                 Preferences.Set(KeyOptedOut, value ? "true" : "false");
                 if (value)
                 {
@@ -61,6 +63,8 @@ sealed class MobileInstallContext : IMobileInstallContext
 
             if (value)
                 OptedOut?.Invoke();
+            if (unanswered)
+                Answered?.Invoke(!value);
         }
     }
 
@@ -83,6 +87,9 @@ sealed class MobileInstallContext : IMobileInstallContext
 
     /// <summary>Raised when the person opposes, so the sender forgets what it still holds.</summary>
     internal Action? OptedOut { get; set; }
+
+    /// <summary>Raised on the first answer to the consent question, true for an acceptance.</summary>
+    internal Action<bool>? Answered { get; set; }
 
     /// <summary>
     /// The current id, reissued when the old one reached its ceiling. Null when opted out, which is

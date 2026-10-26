@@ -3,7 +3,7 @@
 // The Swift client for the collector. The manifest sits at the repository root because SwiftPM
 // requires it there; the sources live in clients/swift, next to the other clients.
 //
-//   .package(url: "https://github.com/vapolia/analytics-clients", from: "1.2.0")
+//   .package(url: "https://github.com/vapolia/analytics-clients", from: "1.3.0")
 
 import PackageDescription
 

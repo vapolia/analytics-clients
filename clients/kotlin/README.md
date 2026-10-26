@@ -6,7 +6,7 @@ A dependency-free Android client for the collector (`POST {endpoint}/{source}`).
 
 ```kotlin
 // build.gradle.kts
-implementation("com.vapolia.analytics:analytics:1.1.0")
+implementation("com.vapolia.analytics:analytics:1.2.0")
 
 // Application.onCreate
 Analytics.start(this, ingestionUrl = "https://analytics.example.com/<sourceName>")
@@ -46,7 +46,7 @@ are yours to name and to place, from `isFirstRun` and `onForeground` above.
 repositories { mavenCentral() }
 
 dependencies {
-    implementation("com.vapolia.analytics:analytics:1.1.0")
+    implementation("com.vapolia.analytics:analytics:1.2.0")
 }
 ```
 
@@ -133,6 +133,8 @@ if (Analytics.consentAnswer == null) showWelcomePopup(asksConsent = Analytics.re
 onAccept = { Analytics.isOptedOut = false }
 onRefuse = { Analytics.isOptedOut = true }
 ```
+
+Until the answer, every `track` is held in memory, at most 100 events, and nothing is written or sent. An acceptance sends them with their original time, and applies a `markSeen()` made meanwhile. A refusal, or the end of the process before any answer, drops them. The app tracks its `first_open` and `app_open` the same way in every regime and sends nothing again after the answer. Once the person has refused, every `track` is dropped.
 
 ## Failure behaviour
 

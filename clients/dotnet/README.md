@@ -102,6 +102,8 @@ onAccept = () => install.IsOptedOut = false;
 onRefuse = () => install.IsOptedOut = true;
 ```
 
+Until the answer, every `Track` is held in memory, at most 100 events, and nothing is written or sent. An acceptance sends them with their original time. A refusal, or the end of the process before any answer, drops them. The app tracks its `first_open` and `app_open` the same way in every regime and sends nothing again after the answer. Once the person has refused, every `Track` is dropped.
+
 With `RequiresPriorConsent` left null, an app that has no popup yet collects nothing in the countries that require prior consent.
 
 ## Options
