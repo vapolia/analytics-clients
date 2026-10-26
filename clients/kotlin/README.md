@@ -16,8 +16,7 @@ Analytics.context = { mapOf("plan" to user.plan, "tutorial_done" to progress.don
 
 // your own opens: the client names no event
 if (Analytics.isFirstRun) { Analytics.track("first_open"); Analytics.markSeen() }
-Analytics.track("app_open")
-Analytics.onForeground = { Analytics.track("app_open") }
+Analytics.onForeground = { Analytics.track("app_open") }   // the first activity included
 
 // anywhere, on any thread
 Analytics.track("game_end", "result" to "win", "moves" to 34)
@@ -62,7 +61,7 @@ manifest.
 | Device context | `country`, and only `country`: the **region setting**, never a geolocation. The platform, the build, the OS version, the device class and the store come from the `Authorization` token, which names the build that was issued it — see the [contract](https://github.com/vapolia/analytics-clients/blob/main/clients/README.md#payload). |
 | Time zone | Each event carries the device offset in minutes east of UTC (`tz`), read at the instant of the event, apart from its UTC `ts`. |
 | `isFirstRun` | Whether the installation has been seen before, so *your* `first_open` fires once — kept apart from the id, so a renewal is not a new install. |
-| `onForeground` / `onBackground` | The activity lifecycle the client already watches to flush, with its rotation guard. |
+| `onForeground` / `onBackground` | The activity lifecycle the client already watches to flush, with its rotation guard. `onForeground` fires for the first activity of the process too, so `app_open` needs no explicit call at start, and a process started by a service with no activity counts no open. |
 | Background | The queue is sent and spooled to disk when the last activity stops. |
 
 The queue is sent and written down when the app goes to the background, on its own.

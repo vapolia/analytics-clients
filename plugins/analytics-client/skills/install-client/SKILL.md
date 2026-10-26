@@ -91,14 +91,16 @@ and what is counted from them is decided where the numbers are read.
 | How many openings | `app_open`, at start and on each return to the foreground, from the client's lifecycle hook. |
 | What people do first after opening | Nothing new: the actions the app already sends. The first one after an `app_open` is read out of the sequence, not marked at the call site. |
 
-```kotlin
-if (Analytics.isFirstRun) { Analytics.track("first_open"); Analytics.markSeen() }
+```swift
+if Analytics.isFirstRun { Analytics.track("first_open"); Analytics.markSeen() }
 Analytics.track("app_open")
 Analytics.onForeground = { Analytics.track("app_open") }
 ```
 
-The same three lines exist in every client's README, under its own spelling. Emitting `first_open`
-without `markSeen()` sends it again at the next launch.
+The same three lines exist in the Swift, JS and .NET READMEs, under their own spelling: their
+foreground hook is not raised for the launch. Kotlin has two lines only: `onForeground` also fires for
+the first activity of the process, so it covers the launch, and a process started by a service with no
+activity counts no open. Emitting `first_open` without `markSeen()` sends it again at the next launch.
 
 ## The welcome popup
 

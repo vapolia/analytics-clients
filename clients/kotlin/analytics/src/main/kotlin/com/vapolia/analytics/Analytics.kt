@@ -203,8 +203,9 @@ object Analytics {
     fun seed(seed: InstallSeed): Boolean = identity?.seed(seed) ?: false
 
     /**
-     * The app coming back to the foreground — where an app names its own `app_open`. It hangs off the
-     * activity-lifecycle subscription the client already holds, so a rotation does not fire it.
+     * The app coming to the foreground, the first activity of the process included — where an app
+     * names its own `app_open`. It hangs off the activity-lifecycle subscription the client already
+     * holds, so a rotation does not fire it.
      */
     @JvmStatic
     @Volatile
