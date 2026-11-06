@@ -46,6 +46,7 @@ An event you need that is not on the list is a request to the operator, not a na
 | MAUI / Android / iOS / Windows app | [.NET](https://github.com/vapolia/analytics-clients/blob/main/clients/dotnet/README.md) | `Vapolia.Analytics.Client` |
 | Blazor / ASP.NET Core site | [.NET](https://github.com/vapolia/analytics-clients/blob/main/clients/dotnet/README.md) | `Vapolia.Analytics.Client.AspNetCore` |
 | Server-rendered PHP site | [PHP](https://github.com/vapolia/analytics-clients/blob/main/clients/php/README.md) | `clients/php/src/Analytics.php`, one file, PHP 7.4+ with curl |
+| Node.js backend or website (Express, Next.js…) | [Node](https://github.com/vapolia/analytics-clients/blob/main/clients/node/README.md) | `@vapolia/analytics-node` (Node 20+) |
 | Game server, backend (Nakama…) | [Go](https://github.com/vapolia/analytics-clients/blob/main/clients/go/README.md) | `go get github.com/vapolia/analytics-clients/clients/go` |
 
 Read the chosen client's README before writing anything: its Summary is the whole integration.

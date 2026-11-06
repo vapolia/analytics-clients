@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "stripInternal": true,
+    "outDir": "dist/esm"
+  },
+  "exclude": ["src/__tests__"]
+}

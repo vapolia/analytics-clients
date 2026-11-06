@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "stripInternal": true,
+    "module": "CommonJS",
+    "moduleResolution": "bundler",
+    "outDir": "dist/cjs"
+  },
+  "exclude": ["src/__tests__"]
+}

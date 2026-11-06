@@ -13,11 +13,13 @@ Claude Code: the [`install-client` skill](plugins/analytics-client/skills/instal
 | [.NET](clients/dotnet/README.md) | MAUI, Android, iOS, Windows | `Vapolia.Analytics.Client` |
 | [ASP.NET](clients/dotnet/README.md) | Blazor / ASP.NET Core | `Vapolia.Analytics.Client.AspNetCore` |
 | [Go](clients/go/README.md) | Servers | `github.com/vapolia/analytics-clients/clients/go` |
+| [Node](clients/node/README.md) | Node.js servers and websites, Node 20+ | `@vapolia/analytics-node` |
 | [PHP](clients/php/README.md) | Server-rendered PHP sites, PHP 7.4+ | `clients/php/src/Analytics.php`, one file |
 
 [![NuGet][dotnet-nuget-img]][dotnet-nuget-link]
 [![NuGet][aspnet-nuget-img]][aspnet-nuget-link]
 [![npm][js-npm-img]][js-npm-link]
+[![npm][node-npm-img]][node-npm-link]
 
 [dotnet-nuget-img]: https://img.shields.io/nuget/v/Vapolia.Analytics.Client
 [dotnet-nuget-link]: https://www.nuget.org/packages/Vapolia.Analytics.Client/
@@ -25,3 +27,5 @@ Claude Code: the [`install-client` skill](plugins/analytics-client/skills/instal
 [aspnet-nuget-link]: https://www.nuget.org/packages/Vapolia.Analytics.Client.AspNetCore/
 [js-npm-img]: https://img.shields.io/npm/v/@vapolia/analytics
 [js-npm-link]: https://www.npmjs.com/package/@vapolia/analytics
+[node-npm-img]: https://img.shields.io/npm/v/@vapolia/analytics-node
+[node-npm-link]: https://www.npmjs.com/package/@vapolia/analytics-node

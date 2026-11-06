@@ -1,0 +1,104 @@
+name: Node client Publish
+
+# Releases @vapolia/analytics-node to npm.
+#
+# Publish a GitHub release whose tag is the version, which must match the one in package.json:
+#   gh release create node-v1.0.1 --title "Node client 1.0.1" --notes "..."
+#
+# Tick "Set as a pre-release" for a beta. Its version must then carry a semver prerelease suffix
+# (node-v1.1.0-beta.1), and it goes out under the `next` dist-tag: without that, npm would move `latest`
+# onto the beta and serve it to everyone running `npm i @vapolia/analytics-node`.
+#
+# A release is the only trigger: the version check below has nothing to compare against otherwise,
+# and a failed run is re-run from its own page. The run stages the version; approving it is a second,
+# manual step — see the last step below.
+#
+# Authentication is npm's trusted publishing, declared on npmjs.com under the package's settings:
+# organisation vapolia, repository analytics-clients, workflow node-client-publish.yml. No token, and
+# renaming this file or moving the repository breaks the publish until the declaration follows.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write   # what npm's trusted publishing authenticates this run with
+
+concurrency:
+  group: node-publish
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: clients/node
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    # A release event carries no tag filter, unlike a tag push, so every client's workflow wakes on
+    # every release of this repository. This is what keeps each one to its own.
+    if: startsWith(github.event.release.tag_name, 'node-v')
+
+    env:
+      TAG: ${{ github.event.release.tag_name }}
+      PRERELEASE: ${{ github.event.release.prerelease }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: clients/node/pnpm-lock.yaml
+          registry-url: 'https://registry.npmjs.org'
+
+      # The two mistakes this catches: a beta published as the stable one, and a stable release
+      # carrying a suffix that would send it to the `next` dist-tag and never to `latest`.
+      - name: Check the tag against package.json
+        id: version
+        run: |
+          declared=$(node -p "require('./package.json').version")
+          tagged="${TAG#node-v}"
+          if [ "$declared" != "$tagged" ]; then
+            echo "tag $TAG says $tagged, package.json says $declared" >&2
+            exit 1
+          fi
+
+          case "$declared" in *-*) suffixed=true ;; *) suffixed=false ;; esac
+          if [ "$PRERELEASE" != "$suffixed" ]; then
+            echo "the release is marked prerelease=$PRERELEASE, and $declared has a suffix: $suffixed" >&2
+            echo "a pre-release needs a suffix (1.1.0-beta.1); a release must not carry one" >&2
+            exit 1
+          fi
+
+          if [ "$PRERELEASE" = "true" ]; then
+            echo "tag=next" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+          fi
+          echo "publishing $declared"
+
+      # A version is published once and cannot be taken back, so the whole check runs here too rather
+      # than trusting that the build workflow saw this exact commit.
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm typecheck
+      - run: pnpm build
+
+      # Trusted publishing needs npm 11.5.1, `npm stage` needs 12; Node 22 ships an older one.
+      - run: npm install -g npm@latest
+
+      # No token: npm authenticates this run through the trusted publisher declared on npmjs.com
+      # (organisation vapolia, repository analytics-clients, workflow node-client-publish.yml), from the
+      # OIDC token id-token above allows. Provenance comes with it, so --provenance is not passed.
+      #
+      # `stage publish`, not `publish`: it uploads the tarball and stops there. The version appears on
+      # npm only once a human approves it with their 2FA — `npm stage approve <stage-id>`, or from the
+      # package's page. `npm stage list @vapolia/analytics-node` shows what is waiting.
+      - run: npm stage publish . --access public --ignore-scripts --tag ${{ steps.version.outputs.tag }}

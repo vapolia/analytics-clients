@@ -1,0 +1,47 @@
+name: Node client Test
+
+# Tests and build.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'clients/node/**'
+      - '.github/workflows/node-client-test.yml'
+  pull_request:
+    paths:
+      - 'clients/node/**'
+      - '.github/workflows/node-client-test.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: node-client-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: clients/node
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: clients/node/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm typecheck
+      - run: pnpm build

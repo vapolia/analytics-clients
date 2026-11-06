@@ -1,0 +1,57 @@
+{
+  "name": "@vapolia/analytics-node",
+  "version": "1.0.0",
+  "description": "Node.js server client for the Vapolia audience-measurement collector: game servers, APIs and websites.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vapolia/analytics-clients.git",
+    "directory": "clients/node"
+  },
+  "homepage": "https://github.com/vapolia/analytics-clients/tree/main/clients/node#readme",
+  "keywords": [
+    "analytics",
+    "node",
+    "server",
+    "privacy"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/cjs/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/esm/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/index.d.ts",
+        "default": "./dist/cjs/index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "node scripts/clean.mjs && tsc -p tsconfig.esm.json && tsc -p tsconfig.cjs.json && node scripts/mark-formats.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "prepack": "pnpm build"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}
