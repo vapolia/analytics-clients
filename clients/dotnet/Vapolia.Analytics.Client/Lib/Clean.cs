@@ -81,6 +81,26 @@ static class Clean
         return parsed.ToString("D");
     }
 
+    /// <summary>
+    /// One IPv4 or IPv6 address, or null. An IPv4-mapped IPv6 address becomes its IPv4 form, and an
+    /// IPv6 zone is removed.
+    /// </summary>
+    public static string? IpAddress(string? value)
+    {
+        var text = value?.Trim();
+        // IPAddress.TryParse also reads "1" as 0.0.0.1: an address has dots or colons.
+        if (string.IsNullOrEmpty(text) || !(text.Contains('.') || text.Contains(':'))
+            || !System.Net.IPAddress.TryParse(text, out var address))
+            return null;
+
+        if (address.IsIPv4MappedToIPv6)
+            address = address.MapToIPv4();
+        else if (address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6)
+            address.ScopeId = 0;
+
+        return address.ToString();
+    }
+
     /// <summary>Scalars only, capped in count and in length. Keys are cleaned like the values.</summary>
     public static Dictionary<string, PropValue>? Props(IReadOnlyDictionary<string, object?>? props, int maxKeys = MaxPropsPerEvent)
     {

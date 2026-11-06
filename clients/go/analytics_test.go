@@ -23,6 +23,7 @@ type collector struct {
 	raw      [][]byte // the bodies as received, for the contract test
 	statuses []int    // consumed in order; 204 once exhausted
 	header   http.Header
+	headers  []http.Header // one per request, in order
 }
 
 func (c *collector) handler(w http.ResponseWriter, r *http.Request) {
@@ -35,6 +36,7 @@ func (c *collector) handler(w http.ResponseWriter, r *http.Request) {
 	c.batches = append(c.batches, batch)
 	c.raw = append(c.raw, body)
 	c.header = r.Header.Clone()
+	c.headers = append(c.headers, r.Header.Clone())
 	status := http.StatusNoContent
 	if len(c.statuses) > 0 {
 		status, c.statuses = c.statuses[0], c.statuses[1:]
@@ -445,5 +447,55 @@ func TestCleansPropKeysLikeValues(t *testing.T) {
 	}
 	if _, found := kept["mode"]; !found {
 		t.Error("the key was not trimmed and stripped of its control character")
+	}
+}
+
+func (c *collector) addresses() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var got []string
+	for _, h := range c.headers {
+		got = append(got, h.Get(ClientAddressHeader))
+	}
+	return got
+}
+
+func TestSendsOneRequestPerClientAddress(t *testing.T) {
+	client, col := newTestClient(t, Options{Token: "server-token"})
+
+	client.For(installID, Device{}).WithClientAddress("203.0.113.7").Track("a", nil)
+	client.For(installID, Device{}).WithClientAddress("2001:db8::1").Track("b", nil)
+	client.For(installID, Device{}).WithClientAddress("203.0.113.7").Track("c", nil)
+	flush(t, client)
+
+	got := col.addresses()
+	slices.Sort(got)
+	if want := []string{"2001:db8::1", "203.0.113.7"}; !slices.Equal(got, want) {
+		t.Fatalf("addresses = %v, want %v", got, want)
+	}
+}
+
+func TestNormalisesAndDropsClientAddresses(t *testing.T) {
+	client, col := newTestClient(t, Options{Token: "server-token"})
+
+	client.For(installID, Device{}).WithClientAddress("::FFFF:198.51.100.4").Track("a", nil)
+	client.For("22222222-0000-0000-0000-000022222222", Device{}).WithClientAddress("not-an-ip").Track("b", nil)
+	flush(t, client)
+
+	got := col.addresses()
+	slices.Sort(got)
+	if want := []string{"", "198.51.100.4"}; !slices.Equal(got, want) {
+		t.Fatalf("addresses = %v, want %v", got, want)
+	}
+}
+
+func TestClientAddressNeedsAToken(t *testing.T) {
+	client, col := newTestClient(t, Options{})
+
+	client.For(installID, Device{}).WithClientAddress("203.0.113.7").Track("a", nil)
+	flush(t, client)
+
+	if got := col.addresses(); len(got) != 1 || got[0] != "" {
+		t.Fatalf("addresses = %v, want one empty", got)
 	}
 }

@@ -36,7 +36,7 @@ class Analytics
     private array $options;
     private bool $measuring;
 
-    /** @var array<int, array{installId: string, country: ?string, context: array, event: array}> */
+    /** @var array<int, array{installId: string, country: ?string, context: array, clientAddress: ?string, event: array}> */
     private array $queue = [];
     private ?string $installId = null;
     private ?bool $answer = null;
@@ -79,6 +79,7 @@ class Analytics
             'optOutCookieName' => (string)($web['optOutCookieName'] ?? '_vau_off'),
             'requiresPriorConsentForLocale' => $web['requiresPriorConsentForLocale'] ?? null,
             'timeZoneOffset' => $web['timeZoneOffset'] ?? null,
+            'clientAddress' => $web['clientAddress'] ?? null,
         ];
 
         $this->measuring = !$this->options['isDebugBuild']
@@ -134,6 +135,7 @@ class Analytics
                 'installId' => $installId,
                 'country' => $country,
                 'context' => self::props(is_array($context) ? $context : [], self::MAX_CONTEXT_KEYS),
+                'clientAddress' => $this->clientAddress(),
                 'event' => $event,
             ];
             $this->stats['accepted']++;
@@ -152,8 +154,8 @@ class Analytics
         $pending = $this->queue;
         $this->queue = [];
 
-        foreach (self::batches($pending, $this->options['batchSize']) as [$body, $count])
-            $this->send($body, $count);
+        foreach (self::batches($pending, $this->options['batchSize']) as [$body, $count, $clientAddress])
+            $this->send($body, $count, $clientAddress);
     }
 
     /**
@@ -336,6 +338,12 @@ class Analytics
         return PHP_SAPI !== 'cli' && PHP_SAPI !== 'phpdbg';
     }
 
+    protected function remoteAddress(): ?string
+    {
+        $value = $_SERVER['REMOTE_ADDR'] ?? null;
+        return is_string($value) ? $value : null;
+    }
+
     protected function acceptLanguage(): ?string
     {
         $value = $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? null;
@@ -344,15 +352,19 @@ class Analytics
 
     /**
      * One POST. Returns the HTTP status (0 on a network error) and the `Retry-After` header in
-     * seconds, null when absent.
+     * seconds, null when absent. The client address is sent under a token only: the collector
+     * ignores it without one.
      *
      * @return array{0: int, 1: ?int}
      */
-    protected function post(string $body): array
+    protected function post(string $body, ?string $clientAddress = null): array
     {
         $headers = ['Content-Type: application/json', 'User-Agent: vapolia-analytics-php/' . self::VERSION];
-        if ($this->options['token'] !== '')
+        if ($this->options['token'] !== '') {
             $headers[] = 'Authorization: Bearer ' . $this->options['token'];
+            if ($clientAddress !== null)
+                $headers[] = 'X-Analytics-Client-Address: ' . $clientAddress;
+        }
 
         $retryAfter = null;
         $curl = curl_init($this->options['ingestionUrl']);
@@ -388,11 +400,11 @@ class Analytics
 
     // ---- Sending.
 
-    private function send(string $body, int $count): void
+    private function send(string $body, int $count, ?string $clientAddress): void
     {
         for ($attempt = 1; ; $attempt++) {
             $this->stats['requests']++;
-            [$status, $retryAfter] = $this->post($body);
+            [$status, $retryAfter] = $this->post($body, $clientAddress);
 
             if ($status >= 200 && $status < 300) {
                 $this->stats['sent'] += $count;
@@ -434,16 +446,16 @@ class Analytics
     }
 
     /**
-     * The request bodies, with their event count: one per install id, country and context, at most
-     * `$batchSize` events each.
+     * The request bodies, with their event count and client address: one per install id, country,
+     * context and address, at most `$batchSize` events each.
      *
-     * @return array<int, array{0: string, 1: int}>
+     * @return array<int, array{0: string, 1: int, 2: ?string}>
      */
     private static function batches(array $pending, int $batchSize): array
     {
         $groups = [];
         foreach ($pending as $item) {
-            $key = json_encode([$item['installId'], $item['country'], $item['context']]);
+            $key = json_encode([$item['installId'], $item['country'], $item['context'], $item['clientAddress']]);
             $groups[$key][] = $item;
         }
 
@@ -459,7 +471,7 @@ class Analytics
                 $batch['events'] = array_map(fn($item) => $item['event'], $chunk);
 
                 $body = json_encode($batch, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION);
-                $bodies[] = [$body, count($chunk)];
+                $bodies[] = [$body, count($chunk), $first['clientAddress']];
             }
         }
 
@@ -562,6 +574,32 @@ class Analytics
         // "fr-FR,fr;q=0.9,en;q=0.8": the first tag is the preferred one.
         $first = trim(explode(';', explode(',', $header)[0])[0]);
         return $first === '' ? null : $first;
+    }
+
+    /** The visitor's address: `web.clientAddress` when set, else `REMOTE_ADDR`. */
+    private function clientAddress(): ?string
+    {
+        $value = is_callable($this->options['clientAddress']) ? ($this->options['clientAddress'])() : $this->remoteAddress();
+        return self::ipAddress(is_string($value) ? $value : null);
+    }
+
+    /**
+     * One IPv4 or IPv6 address, or null. An IPv4-mapped IPv6 address becomes its IPv4 form, and an
+     * IPv6 zone is removed.
+     */
+    public static function ipAddress(?string $value): ?string
+    {
+        if ($value === null)
+            return null;
+
+        $address = strtolower(trim($value));
+        $zone = strpos($address, '%');
+        if ($zone !== false)
+            $address = substr($address, 0, $zone);
+        if (preg_match('/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/', $address, $mapped) === 1)
+            $address = $mapped[1];
+
+        return filter_var($address, FILTER_VALIDATE_IP) === false ? null : $address;
     }
 
     private function timeZoneOffset(): ?int

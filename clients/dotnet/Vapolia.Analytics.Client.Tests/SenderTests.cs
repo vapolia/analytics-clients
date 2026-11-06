@@ -9,20 +9,27 @@ sealed class FakeCollector(params SendResult[] answers) : IPublishHelper
     readonly Queue<SendResult> queued = new(answers);
     readonly Lock gate = new();
     readonly List<string> bodies = [];
+    readonly List<string?> addresses = [];
 
     public IReadOnlyList<string> Bodies
     {
         get { lock (gate) return bodies.ToList(); }
     }
 
+    public IReadOnlyList<string?> Addresses
+    {
+        get { lock (gate) return addresses.ToList(); }
+    }
+
     public IReadOnlyList<JsonElement> Batches
         => Bodies.Select(b => JsonDocument.Parse(b).RootElement).ToList();
 
-    public Task<SendResult> PostAsync(string body, CancellationToken cancellationToken)
+    public Task<SendResult> PostAsync(string body, string? clientAddress, CancellationToken cancellationToken)
     {
         lock (gate)
         {
             bodies.Add(body);
+            addresses.Add(clientAddress);
             return Task.FromResult(queued.Count > 0 ? queued.Dequeue() : SendResult.Ok);
         }
     }

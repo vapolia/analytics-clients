@@ -8,7 +8,7 @@ namespace Vapolia.Analytics.Client;
 /// </remarks>
 interface IPublishHelper
 {
-    Task<SendResult> PostAsync(string body, CancellationToken cancellationToken);
+    Task<SendResult> PostAsync(string body, string? clientAddress, CancellationToken cancellationToken);
 }
 
 readonly record struct SendResult(SendOutcome Outcome, TimeSpan RetryAfter, string Reason, Exception? Exception = null)

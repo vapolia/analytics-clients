@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"strings"
 	"time"
@@ -59,7 +60,7 @@ func (c *Client) send(key batchKey, events []wireEvent) {
 	}
 
 	for attempt := 1; ; attempt++ {
-		wait, err := c.post(body)
+		wait, err := c.post(body, key.clientAddress)
 		if err == nil {
 			c.sent.Add(uint64(len(events)))
 			return
@@ -75,7 +76,7 @@ func (c *Client) send(key batchKey, events []wireEvent) {
 		c.warnf(err, "retrying %d events (attempt %d)", len(events), attempt)
 		if !c.sleep(backoff(attempt, wait)) {
 			// Closing: give the batch one last chance rather than sleeping through the shutdown.
-			if _, err := c.post(body); err == nil {
+			if _, err := c.post(body, key.clientAddress); err == nil {
 				c.sent.Add(uint64(len(events)))
 				return
 			}
@@ -85,8 +86,12 @@ func (c *Client) send(key batchKey, events []wireEvent) {
 	}
 }
 
+// ClientAddressHeader carries the end client's IP address. The collector reads it under a server
+// token only, so it is not sent without one.
+const ClientAddressHeader = "X-Analytics-Client-Address"
+
 // post issues one request. The returned duration is the server's Retry-After, when it sent one.
-func (c *Client) post(body []byte) (time.Duration, error) {
+func (c *Client) post(body []byte, clientAddress string) (time.Duration, error) {
 	c.requests.Add(1)
 
 	ctx := context.Background()
@@ -104,6 +109,9 @@ func (c *Client) post(body []byte) (time.Duration, error) {
 	// Only ever a rate-limit ceiling; the collector accepts the batch either way.
 	if c.opts.Token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.opts.Token)
+		if clientAddress != "" {
+			req.Header.Set(ClientAddressHeader, clientAddress)
+		}
 	}
 
 	resp, err := c.adv.HTTPClient.Do(req)
@@ -215,6 +223,16 @@ func cleanInstallID(value string) (string, bool) {
 
 func isHex(r rune) bool {
 	return (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')
+}
+
+// cleanClientAddress returns one IPv4 or IPv6 address, or "". An IPv4-mapped IPv6 address becomes its
+// IPv4 form, and an IPv6 zone is removed.
+func cleanClientAddress(value string) string {
+	addr, err := netip.ParseAddr(strings.TrimSpace(value))
+	if err != nil {
+		return ""
+	}
+	return addr.Unmap().WithZone("").String()
 }
 
 // rawContext turns the canonical text the batch key carries into the JSON the payload embeds. An

@@ -66,7 +66,7 @@ sealed class Analytics(
         }
 
         sender.Track(new Pending(
-            new BatchKey(installId, device, batchContext),
+            new BatchKey(installId, device, batchContext, Clean.IpAddress(identity.ClientAddress)),
             new Event(eventName.ToString(), at, Clean.Props(props), tz)));
     }
 

@@ -7,11 +7,12 @@ namespace Vapolia.Analytics.Client;
 sealed record Event(string Name, DateTimeOffset Ts, Dictionary<string, PropValue>? Props, int? Tz = null);
 
 /// <summary>
-/// What groups events into one request: one batch carries one installation, one device and one
-/// context. The context travels as its canonical JSON text rather than a dictionary, so two batches
-/// with the same context compare equal and group together.
+/// What groups events into one request: one batch carries one installation, one device, one context
+/// and one client address. The context travels as its canonical JSON text rather than a dictionary, so
+/// two batches with the same context compare equal and group together. The client address is never
+/// written to the spool.
 /// </summary>
-sealed record BatchKey(string InstallId, Device Device, string Context = "{}");
+sealed record BatchKey(string InstallId, Device Device, string Context = "{}", string? ClientAddress = null);
 
 sealed record Pending(BatchKey Key, Event Event);
 

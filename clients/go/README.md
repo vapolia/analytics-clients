@@ -45,6 +45,7 @@ oppose, so an opposed installation simply stops calling the RPC.
 | `New(Options) (*Client, error)` | Starts the client and its sender. |
 | `Track(installID string, device Device, name string, props map[string]any)` | Queues one event. Drops on a full queue rather than blocking. |
 | `For(installID, device) Session` → `Session.Track(name, props)` | Same, with the install and device bound once. |
+| `Session.WithClientAddress(ip)` | The end client's IP address. See [Client address](#client-address). |
 | `Flush(ctx) error` | Sends what is queued and waits for it. |
 | `Close(ctx) error` | One last flush, then stops the sender. Idempotent. |
 | `Stats() Stats` | Accepted / Rejected / Dropped / Sent / Requests counters. |
@@ -84,6 +85,19 @@ two contexts never share a request. The server has none of this of its own — t
 RPC payload, like the install id and the device.
 
 A server knows no time zone of its users either: `Session.WithTimeZone(minutes)` sends the offset its app or page reported, in minutes east of UTC, with each event. An offset outside UTC−12:00..UTC+14:00 is dropped.
+
+## Client address
+
+Under a `Token`, the client sends the end client's IP address in `X-Analytics-Client-Address`, one address per request. The collector checks it against public blocklists, answers `204` and stores nothing when it is listed, and never stores nor logs the header. Without a token, the header is not sent.
+
+In a Nakama RPC, the address is in the context:
+
+```go
+ip, _ := ctx.Value(runtime.RUNTIME_CTX_CLIENT_IP).(string)
+client.For(installID, device).WithClientAddress(ip).Track("game_end", props)
+```
+
+An IPv4-mapped IPv6 address (`::ffff:a.b.c.d`) is sent in its IPv4 form. An invalid address is not sent.
 
 ## Failure behaviour
 

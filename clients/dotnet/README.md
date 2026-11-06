@@ -365,6 +365,11 @@ For a server, the real answer is a **server key**: `AnalyticsOptions.Token`, a s
 which uses it to throttle instead of the IP address, with a default max events of 6000/min instead of 600. The same
 property also carries a build token for a mobile app — the collector tells them apart from the token itself.
 
+Under a server token, the web client sends the visitor's IP address in `X-Analytics-Client-Address`, read from
+`HttpContext.Connection.RemoteIpAddress`. The collector checks it against public blocklists, answers `204` and stores
+nothing when it is listed, and never stores nor logs the header. Behind a reverse proxy, add the `ForwardedHeaders`
+middleware so that `RemoteIpAddress` is the visitor's address. The address is never written to the spool.
+
 ### Other
 
 The client also does two things on its own:

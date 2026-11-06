@@ -136,8 +136,11 @@ The names are the ones of the other clients. Durations are in milliseconds.
 | `web` | `optOutCookieName` | `_vau_off` |
 | `web` | `requiresPriorConsentForLocale` | none |
 | `web` | `timeZoneOffset` | none. A function returning the visitor's offset in minutes east of UTC, for example from a cookie set by a script. |
+| `web` | `clientAddress` | `$_SERVER['REMOTE_ADDR']`. A function returning the visitor's IP address, for a site behind a reverse proxy. |
 
 A server speaks for every visitor, so this client has no per-client rate window. Pass a server `token`: the collector then throttles per token instead of per IP address.
+
+Under a `token`, the client sends the visitor's IP address in `X-Analytics-Client-Address`. The collector checks it against public blocklists, answers `204` and stores nothing when it is listed, and never stores nor logs the header. Behind a reverse proxy, `REMOTE_ADDR` is the proxy: return the visitor's address from `web.clientAddress`, read from the header your proxy overwrites.
 
 ## Sending
 

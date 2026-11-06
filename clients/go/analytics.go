@@ -132,6 +132,9 @@ type batchKey struct {
 	// context is the canonical JSON of the batch context. A string, so the key stays comparable and
 	// two identical contexts group into one request.
 	context string
+	// clientAddress is the end client's IP address, sent as X-Analytics-Client-Address. One address
+	// per request, so it is part of the key.
+	clientAddress string
 }
 
 type pending struct {
@@ -209,11 +212,12 @@ func (c *Client) Track(installID string, device Device, name string, props map[s
 // TrackContext is Track with the batch context the app reported: what is true of the installation
 // rather than of one event. Every key must be on the source's context whitelist.
 func (c *Client) TrackContext(installID string, device Device, context map[string]any, name string, props map[string]any) {
-	c.track(installID, device, context, nil, name, props)
+	c.track(installID, device, context, nil, "", name, props)
 }
 
-// track is the one path every Track goes through. tz is the UTC offset of the caller's own user, when the caller knows it.
-func (c *Client) track(installID string, device Device, context map[string]any, tz *int, name string, props map[string]any) {
+// track is the one path every Track goes through. tz is the UTC offset of the caller's own user, when
+// the caller knows it, and clientAddress the IP address of that user, when the caller has it.
+func (c *Client) track(installID string, device Device, context map[string]any, tz *int, clientAddress string, name string, props map[string]any) {
 	if !c.enabled {
 		return
 	}
@@ -252,7 +256,7 @@ func (c *Client) track(installID string, device Device, context map[string]any, 
 	}
 
 	item := pending{
-		key: batchKey{installID: id, device: cleanDevice, context: encodeContext(context)},
+		key: batchKey{installID: id, device: cleanDevice, context: encodeContext(context), clientAddress: cleanClientAddress(clientAddress)},
 		event: wireEvent{
 			Name:  eventName,
 			Ts:    c.adv.Now().UTC(),
@@ -302,6 +306,7 @@ type Session struct {
 	device    Device
 	context   map[string]any
 	tz        *int
+	address   string
 }
 
 // For returns a Session for one installation. The device context is captured as of this call.
@@ -322,12 +327,20 @@ func (s Session) WithTimeZone(minutes int) Session {
 	return s
 }
 
+// WithClientAddress returns the same session carrying the end client's IPv4 or IPv6 address, for
+// example from runtime.RUNTIME_CTX_CLIENT_IP in a Nakama RPC. It is sent as
+// X-Analytics-Client-Address when the client has a Token. An invalid address is not sent.
+func (s Session) WithClientAddress(address string) Session {
+	s.address = address
+	return s
+}
+
 // Track queues one event for the session's installation.
 func (s Session) Track(name string, props map[string]any) {
 	if s.client == nil {
 		return
 	}
-	s.client.track(s.installID, s.device, s.context, s.tz, name, props)
+	s.client.track(s.installID, s.device, s.context, s.tz, s.address, name, props)
 }
 
 // Flush sends everything queued so far and waits for it. It returns when the sender is done, when

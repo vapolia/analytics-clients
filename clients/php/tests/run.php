@@ -19,6 +19,8 @@ final class TestAnalytics extends Analytics
     /** @var array<int, array{0: int, 1: ?int}> answers served in order, then 204 */
     public array $answers = [];
     public array $slept = [];
+    public array $addresses = [];
+    public ?string $remote = '203.0.113.5';
 
     protected function readCookie(string $name): ?string { return $this->cookies[$name] ?? null; }
     protected function writeCookie(string $name, string $value, int $expires): void
@@ -29,7 +31,8 @@ final class TestAnalytics extends Analytics
     protected function headersSent(): bool { return $this->sent; }
     protected function isHttpRequest(): bool { return true; }
     protected function acceptLanguage(): ?string { return $this->language; }
-    protected function post(string $body): array { $this->bodies[] = json_decode($body, true); return array_shift($this->answers) ?? [204, null]; }
+    protected function remoteAddress(): ?string { return $this->remote; }
+    protected function post(string $body, ?string $clientAddress = null): array { $this->bodies[] = json_decode($body, true); $this->addresses[] = $clientAddress; return array_shift($this->answers) ?? [204, null]; }
     protected function sleepMs(int $ms): void { $this->slept[] = $ms; }
 }
 
@@ -234,6 +237,24 @@ test('adds the visitor time zone when the site supplies it', function () {
     $a->track('page_view');
     $a->flush();
     same(120, $a->bodies[0]['events'][0]['tz']);
+});
+
+test('sends the visitor address from REMOTE_ADDR, or from web.clientAddress', function () {
+    $a = client(['requiresPriorConsent' => false]);
+    $a->track('page_view');
+    $a->flush();
+    same(['203.0.113.5'], $a->addresses);
+
+    $b = client(['requiresPriorConsent' => false, 'web' => ['clientAddress' => fn() => '::FFFF:198.51.100.4']]);
+    $b->track('page_view');
+    $b->flush();
+    same(['198.51.100.4'], $b->addresses);
+});
+
+test('drops an invalid address', function () {
+    same(null, Analytics::ipAddress('not-an-ip'));
+    same(null, Analytics::ipAddress('10.0.0.1, 10.0.0.2'));
+    same('2001:db8::1', Analytics::ipAddress(' 2001:DB8::1%eth0 '));
 });
 
 echo $failures === 0 ? "\nall passed\n" : "\n$failures failed\n";

@@ -34,4 +34,10 @@ public interface IInstallContext
     /// popup or the cookie banner.
     /// </summary>
     bool RequiresPriorConsent { get; }
+
+    /// <summary>
+    /// The IP address of the current visitor, sent as <c>X-Analytics-Client-Address</c> under a server
+    /// token. Null on a device, which posts from its own address.
+    /// </summary>
+    string? ClientAddress => null;
 }

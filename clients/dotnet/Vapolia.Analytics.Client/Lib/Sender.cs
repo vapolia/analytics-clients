@@ -295,7 +295,7 @@ sealed class Sender : IAsyncDisposable
             SendResult result;
             try
             {
-                result = await publishHelper.PostAsync(body, stopping.Token).ConfigureAwait(false);
+                result = await publishHelper.PostAsync(body, key.ClientAddress, stopping.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {

@@ -156,8 +156,8 @@ you — the Go client in particular takes whatever id you hand it.
 ## What the collector guarantees, so you do not have to
 
 - No IP address is ever stored or logged. The country comes from the device or browser locale, never
-  from geolocation. The address is read for rate limiting only, as a salted hash whose salt is
-  redrawn at every start.
+  from geolocation. The address is read for rate limiting, as a salted hash whose salt is
+  redrawn at every start, and checked against public blocklists.
 - No account column, and none that could be joined to one.
 - Retention capped at 25 months, enforced by dropping partitions.
 - A per-source whitelist: an event or property name that is not on it is dropped, silently. Your
@@ -171,6 +171,9 @@ A server-to-server caller may present a key (`Authorization: Bearer`) so the rat
 it rather than on a client address shared by all its users. It raises a ceiling and grants nothing
 else — what may be written is the source whitelist's business, key or no key. A key that does not
 check out is refused with a 401 rather than demoted, so an expired one is visible immediately.
+
+A server client sends its end client's IP address in `X-Analytics-Client-Address` under a server key.
+The collector checks it against public blocklists and neither stores nor logs it.
 
 Never ship one inside a mobile app: a key in a binary is extractable and whoever extracts it spends everyone's quota.
 

@@ -182,6 +182,12 @@ public sealed class CookieInstallIdentityProvider(IHttpContextAccessor accessor,
     /// </summary>
     public string? Country => RegionOf(PreferredLanguage(accessor.HttpContext));
 
+    /// <summary>
+    /// The visitor's address, from <c>Connection.RemoteIpAddress</c>. Behind a proxy, the
+    /// <c>ForwardedHeaders</c> middleware sets it from the proxy's header.
+    /// </summary>
+    public string? ClientAddress => accessor.HttpContext?.Connection.RemoteIpAddress?.ToString();
+
     static string? PreferredLanguage(HttpContext? context)
     {
         var header = context?.Request.Headers.AcceptLanguage.ToString();

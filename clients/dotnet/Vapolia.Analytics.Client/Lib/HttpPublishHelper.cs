@@ -6,7 +6,7 @@ namespace Vapolia.Analytics.Client;
 /// <summary>One request to POST {endpoint}/{source}.</summary>
 sealed class HttpPublishHelper(HttpClient httpClient, Uri url, string? token = null) : IPublishHelper
 {
-    public async Task<SendResult> PostAsync(string body, CancellationToken cancellationToken)
+    public async Task<SendResult> PostAsync(string body, string? clientAddress, CancellationToken cancellationToken)
     {
         try
         {
@@ -15,7 +15,12 @@ sealed class HttpPublishHelper(HttpClient httpClient, Uri url, string? token = n
 
             // The collector tells a server token from a build token by its own claims, not the caller.
             if (!string.IsNullOrEmpty(token))
+            {
                 request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {token}");
+                // The collector reads the address under a server token only.
+                if (clientAddress is not null)
+                    request.Headers.TryAddWithoutValidation("X-Analytics-Client-Address", clientAddress);
+            }
 
             using var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
 
