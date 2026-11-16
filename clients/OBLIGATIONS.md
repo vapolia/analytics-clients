@@ -38,11 +38,16 @@ This list is a starting point for your own counsel, not a legal opinion. Authori
 
 ### 1. Exempt from consent
 
-**France, Italy, Spain, Netherlands.**
+**France, Italy, Spain, Netherlands, United Kingdom.**
 
 Their authorities published criteria under which first-party audience measurement needs no consent:
 own use, aggregated statistics, no cross-app or cross-site tracking, nothing shared. The clients meet
 them. Information remains mandatory.
+
+In the United Kingdom, Schedule A1 of PECR, inserted by the Data (Use and Access) Act 2025 and in force
+since 5 February 2026, exempts storage or access whose sole purpose is statistics about how a service
+is used, with a view to improving it. The user gets clear information and a simple, free way to object.
+The ICO guidance was finalised on 29 April 2026.
 
 ```text
 ┌────────────────────────────────────────────────────────┐
@@ -60,7 +65,7 @@ The Terms link has to reach a privacy policy naming the measurement, the identif
 
 ### 2. Consent required
 
-**The rest of the EEA plus the United Kingdom and Quebec.**
+**The rest of the EEA and Quebec.**
 
 Nothing is sent until the person has answered.
 

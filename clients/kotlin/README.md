@@ -6,7 +6,7 @@ A dependency-free Android client for the collector (`POST {endpoint}/{source}`).
 
 ```kotlin
 // build.gradle.kts
-implementation("com.vapolia.analytics:analytics:1.2.0")
+implementation("com.vapolia.analytics:analytics:1.3.0")
 
 // Application.onCreate
 Analytics.start(this, ingestionUrl = "https://analytics.example.com/<sourceName>")
@@ -46,7 +46,7 @@ are yours to name and to place, from `isFirstRun` and `onForeground` above.
 repositories { mavenCentral() }
 
 dependencies {
-    implementation("com.vapolia.analytics:analytics:1.2.0")
+    implementation("com.vapolia.analytics:analytics:1.3.0")
 }
 ```
 

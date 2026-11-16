@@ -3,15 +3,15 @@ import { describe, expect, it } from 'vitest';
 import { localeRequiresPriorConsent } from '../core/consent';
 
 describe('localeRequiresPriorConsent', () => {
-  it('asks first across the EEA outside the four exempt countries, and in the UK', () => {
+  it('asks first across the EEA outside the four exempt countries', () => {
     expect(localeRequiresPriorConsent('de-DE')).toBe(true);
-    expect(localeRequiresPriorConsent('en-gb')).toBe(true);
     expect(localeRequiresPriorConsent('nb-NO')).toBe(true);
   });
 
   it('does not ask in an exempt country, nor under a notice regime', () => {
     expect(localeRequiresPriorConsent('fr-FR')).toBe(false);
     expect(localeRequiresPriorConsent('it-IT')).toBe(false);
+    expect(localeRequiresPriorConsent('en-GB')).toBe(false);
     expect(localeRequiresPriorConsent('en-US')).toBe(false);
   });
 

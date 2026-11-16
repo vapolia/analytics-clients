@@ -13,7 +13,7 @@ namespace Vapolia\Analytics;
  */
 class Analytics
 {
-    public const VERSION = '1.0.0';
+    public const VERSION = '1.1.0';
 
     // Limits mirrored from the collector, which applies them again on arrival.
     public const MAX_EVENTS_PER_BATCH = 100;
@@ -25,10 +25,10 @@ class Analytics
 
     /**
      * The default answer for `requiresPriorConsent`: the EEA outside France, Italy, Spain and the
-     * Netherlands, plus the United Kingdom. Same list as the other clients, from OBLIGATIONS.md.
+     * Netherlands. Same list as the other clients, from OBLIGATIONS.md.
      */
     public const PRIOR_CONSENT_COUNTRIES = [
-        'AT', 'BE', 'BG', 'CY', 'CZ', 'DE', 'DK', 'EE', 'FI', 'GB', 'GR', 'HR', 'HU',
+        'AT', 'BE', 'BG', 'CY', 'CZ', 'DE', 'DK', 'EE', 'FI', 'GR', 'HR', 'HU',
         'IE', 'IS', 'LI', 'LT', 'LU', 'LV', 'MT', 'NO', 'PL', 'PT', 'RO', 'SE', 'SI', 'SK',
     ];
 

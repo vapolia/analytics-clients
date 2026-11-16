@@ -3,9 +3,9 @@ import Foundation
 /// The default answer for ``AnalyticsOptions/requiresPriorConsent``, from the regimes listed in
 /// OBLIGATIONS.md. Left nil, the client asks this itself, with the device locale.
 public enum PriorConsentCountries {
-    /// The EEA outside France, Italy, Spain and the Netherlands, plus the United Kingdom.
+    /// The EEA outside France, Italy, Spain and the Netherlands.
     public static let all: Set<String> = [
-        "AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "FI", "GB", "GR", "HR", "HU",
+        "AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "FI", "GR", "HR", "HU",
         "IE", "IS", "LI", "LT", "LU", "LV", "MT", "NO", "PL", "PT", "RO", "SE", "SI", "SK",
     ]
 }

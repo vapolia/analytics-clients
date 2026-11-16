@@ -2,10 +2,10 @@
  * The default answer for `requiresPriorConsent`, from the regimes listed in OBLIGATIONS.md. Left
  * null, the client asks this itself, with the device locale.
  *
- * The EEA outside France, Italy, Spain and the Netherlands, plus the United Kingdom.
+ * The EEA outside France, Italy, Spain and the Netherlands.
  */
 export const PRIOR_CONSENT_COUNTRIES: ReadonlySet<string> = new Set([
-  'AT', 'BE', 'BG', 'CY', 'CZ', 'DE', 'DK', 'EE', 'FI', 'GB', 'GR', 'HR', 'HU',
+  'AT', 'BE', 'BG', 'CY', 'CZ', 'DE', 'DK', 'EE', 'FI', 'GR', 'HR', 'HU',
   'IE', 'IS', 'LI', 'LT', 'LU', 'LV', 'MT', 'NO', 'PL', 'PT', 'RO', 'SE', 'SI', 'SK',
 ]);
 

@@ -122,13 +122,13 @@ where they are. The client reads the same tag for `requiresPriorConsent`.
 
 | Regime | Countries | Popup | Client |
 |---|---|---|---|
-| 1. Exempt | `FR` `IT` `ES` `NL` | Terms, one button | Start normally |
-| 2. Consent | The rest of the EEA, `GB`, Quebec | Terms, plus a question with `REFUSE` and `ACCEPT` of equal prominence | `requiresPriorConsent` resolves to true, flipped by the answer |
+| 1. Exempt | `FR` `IT` `ES` `NL` `GB` | Terms, one button | Start normally |
+| 2. Consent | The rest of the EEA, Quebec | Terms, plus a question with `REFUSE` and `ACCEPT` of equal prominence | `requiresPriorConsent` resolves to true, flipped by the answer |
 | 3. Notice | `US` `CA` `BR` `CH` `JP` `AU`, most of the rest of the world | The popup of regime 1 | Start normally |
 | 4. Not measured | `KR` | No question: it is never measured | `KR` in `excludedCountries` |
 
 Regime 2 in full: `AT` `BE` `BG` `HR` `CY` `CZ` `DK` `EE` `FI` `DE` `GR` `HU` `IE` `IS` `LI` `LT`
-`LU` `LV` `MT` `NO` `PL` `PT` `RO` `SE` `SI` `SK` `GB`.
+`LU` `LV` `MT` `NO` `PL` `PT` `RO` `SE` `SI` `SK`.
 
 Every client answers this itself while `requiresPriorConsent` is null, from the device locale as a
 BCP-47 tag — `localeRequiresPriorConsent(locale)`, or

@@ -1,9 +1,9 @@
 /**
  * The default answer for `requiresPriorConsent`: the EEA outside France, Italy, Spain and the
- * Netherlands, plus the United Kingdom. Same list as the other clients, from OBLIGATIONS.md.
+ * Netherlands. Same list as the other clients, from OBLIGATIONS.md.
  */
 export const PRIOR_CONSENT_COUNTRIES: readonly string[] = [
-  'AT', 'BE', 'BG', 'CY', 'CZ', 'DE', 'DK', 'EE', 'FI', 'GB', 'GR', 'HR', 'HU',
+  'AT', 'BE', 'BG', 'CY', 'CZ', 'DE', 'DK', 'EE', 'FI', 'GR', 'HR', 'HU',
   'IE', 'IS', 'LI', 'LT', 'LU', 'LV', 'MT', 'NO', 'PL', 'PT', 'RO', 'SE', 'SI', 'SK',
 ];
 

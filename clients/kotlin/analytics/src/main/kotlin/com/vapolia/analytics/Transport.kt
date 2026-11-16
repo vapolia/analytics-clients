@@ -55,6 +55,9 @@ internal class Transport(
             }
         } catch (e: IOException) {
             SendResult.Retry(0, "network error: $e")
+        } catch (e: Exception) {
+            // Anything else, such as a SecurityException without the INTERNET permission, must not reach the sender thread.
+            SendResult.Permanent("cannot send: $e")
         } finally {
             // Drain, so the connection can be pooled rather than torn down.
             runCatching { connection.errorStream?.use { it.readBytes() } }

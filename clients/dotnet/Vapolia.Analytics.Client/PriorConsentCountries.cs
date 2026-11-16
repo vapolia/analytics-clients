@@ -7,11 +7,11 @@ namespace Vapolia.Analytics.Client;
 public static class PriorConsentCountries
 {
     /// <summary>
-    /// The EEA outside France, Italy, Spain and the Netherlands, plus the United Kingdom.
+    /// The EEA outside France, Italy, Spain and the Netherlands.
     /// </summary>
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        "AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "FI", "GB", "GR", "HR", "HU",
+        "AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "FI", "GR", "HR", "HU",
         "IE", "IS", "LI", "LT", "LU", "LV", "MT", "NO", "PL", "PT", "RO", "SE", "SI", "SK",
     };
 
