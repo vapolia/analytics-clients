@@ -70,8 +70,10 @@ public static class MobileAnalytics
             if (options.IngestionUrl is not { IsAbsoluteUri: true })
                 throw new InvalidOperationException($"Invalid {nameof(AnalyticsOptions)}.{nameof(AnalyticsOptions.IngestionUrl)}: must be an absolute URL '{options.IngestionUrl}'");
 
+            options.AdvancedOptions.Normalize(logger);
+
             httpClient ??= options.AdvancedOptions.CreateHttpClient?.Invoke() ?? new HttpClient { Timeout = options.AdvancedOptions.RequestTimeout };
-            options.AdvancedOptions.SpoolPath ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "vapolia-analytics-spool.json");
+            options.AdvancedOptions.SpoolPath ??= AppDataFolder.PathOf("vapolia-analytics-spool.json");
 
             var identity = new MobileInstallContext(options);
             var spool = new PersistPendingItemsToLocalStorageHelper(options.AdvancedOptions.SpoolPath, options.AdvancedOptions.SpoolCapacity, logger);

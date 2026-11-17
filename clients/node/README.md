@@ -83,9 +83,9 @@ Events are grouped per (install id, country, context, client address). One group
 
 | | |
 |---|---|
-| **Install id** | A first-party cookie (`_vau`, HttpOnly, Secure, SameSite=Lax) that the server sets once. It expires after 13 months and is never extended. |
+| **Install id** | A first-party cookie (`__Host-vau`, HttpOnly, Secure, SameSite=Lax) that the server sets once. It expires after 13 months and is never extended. |
 | **Country** | The region of the first `Accept-Language` tag, never an IP geolocation. |
-| **Opposition** | A second cookie, `_vau_off`: `1` opposed, `0` accepted, absent unanswered. |
+| **Opposition** | A second cookie, `__Host-vau_off`: `1` opposed, `0` accepted, absent unanswered. |
 
 ```ts
 const web = new WebAnalytics(client, {
@@ -124,10 +124,14 @@ While the visitor has not answered, `isOptedOut` reads, in this order:
 **The built-in default must not be taken as a legal basis: the choice stays yours, and so does the liability for it.**
 
 Until the visitor accepts under a prior-consent regime, no cookie is written and nothing is sent.
-`setOptedOut(false)` writes `_vau_off=0`, which outranks the regime on the next requests.
-`setOptedOut(true)` writes `_vau_off=1`, deletes `_vau` and drops the visitor's buffered events.
+`setOptedOut(false)` writes `__Host-vau_off=0`, which outranks the regime on the next requests.
+`setOptedOut(true)` writes `__Host-vau_off=1`, deletes the id cookie and drops the visitor's buffered events.
 
-Web options: `requiresPriorConsent`, `requiresPriorConsentForLocale`, `cookieName` (`_vau`), `optOutCookieName` (`_vau_off`), `installIdLifetimeMs` and `optOutLifetimeMs` (390 days), `clientAddress`, `timeZoneOffset`, `context`.
+Web options: `requiresPriorConsent`, `requiresPriorConsentForLocale`, `cookieName` (`__Host-vau`), `optOutCookieName` (`__Host-vau_off`), `cookieDomain` (none), `installIdLifetimeMs` and `optOutLifetimeMs` (390 days), `clientAddress`, `timeZoneOffset`, `context`.
+
+The default names carry the `__Host-` prefix, which requires Secure, `Path=/` and no Domain attribute. With `cookieDomain` set, both cookies are written with `Domain=<cookieDomain>` and the names become `__Secure-vau` and `__Secure-vau_off`. A name set in `cookieName` or `optOutCookieName` is used as is.
+
+Visitors who still carry the legacy `_vau` and `_vau_off` cookies are migrated on their next request. The consent answer and the install id are rewritten under the new names with a full lifetime, and the legacy cookies are deleted. Nothing is migrated when the effective name is the legacy one.
 
 ### Relay for a JavaScript front end
 
@@ -150,12 +154,17 @@ const relay = web.relay({
   props: { duration_s: ({ value }) => (typeof value === 'number' ? Math.min(Math.max(value, 0), 86400) : undefined) },
 });
 
-app.use('/api/web/analytics', rateLimiter, relay.node);   // Express: an unknown path calls next()
+app.use('/api/web/analytics', relay.node);               // Express: an unknown path calls next()
 export const POST = relay.fetch;                         // Next.js app/api/web/analytics/[endpoint]/route.ts
 export const GET = relay.fetch;
 ```
 
-Only the declared events and their declared keys are relayed. Events beyond `maxEventsPerRequest` (20) and bodies over `maxBodyBytes` (64 KB) are dropped. Put a rate limiter in front of the relay. The browser side is the snippet in the [ASP.NET Core README](https://github.com/vapolia/analytics-clients/blob/main/clients/dotnet/README.md#web-relay-for-a-javascript-front-end).
+Only the declared events and their declared keys are relayed. Events beyond `maxEventsPerRequest` (20) and bodies over `maxBodyBytes` (64 KB) are dropped.
+
+The relay keeps 30 events per minute for one visitor address, and drops the rest until the minute ends. An IPv6 address counts as its /64. `maxEventsPerAddress` and `rateWindowMs` change the ceiling, and `maxEventsPerAddress: 0` removes it.
+The address is the socket's peer, or what the `clientAddress` web option returns. Behind a proxy, and with the Fetch API handler, set `clientAddress`: a visitor with no address is not limited.
+
+The browser side is the snippet in the [ASP.NET Core README](https://github.com/vapolia/analytics-clients/blob/main/clients/dotnet/README.md#web-relay-for-a-javascript-front-end).
 
 ## Client address
 

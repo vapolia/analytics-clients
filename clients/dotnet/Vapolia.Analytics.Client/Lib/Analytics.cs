@@ -67,7 +67,7 @@ sealed class Analytics(
 
         sender.Track(new Pending(
             new BatchKey(installId, device, batchContext, Clean.IpAddress(identity.ClientAddress)),
-            new Event(eventName.ToString(), at, Clean.Props(props), tz)));
+            new Event(eventName.ToString(), at, Clean.Props(props, dropped: (key, reason) => sender.ReportDroppedProp(name, key, reason)), tz)));
     }
 
     /// <summary>
@@ -93,7 +93,7 @@ sealed class Analytics(
     string CurrentContext()
     {
         var current = context?.GetContext() ?? options?.Context?.Invoke();
-        var cleaned = Clean.Props(current, Clean.MaxContextKeys);
+        var cleaned = Clean.Props(current, Clean.MaxContextKeys, (key, reason) => sender.ReportDroppedProp("(context)", key, reason));
         if (cleaned is null)
             return "{}";
 

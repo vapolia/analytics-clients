@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+
 namespace Vapolia.Analytics.Client;
 
 /// <summary>
@@ -66,5 +68,41 @@ public sealed class AnalyticsAdvancedOptions
     /// <summary>
     /// Called on every loss, next to the log. Can be used to notify the user that an issue is ongoing.
     /// </summary>
-    public Action<Exception?, string, bool>? OnError { get; set; }
+    public AnalyticsErrorHandler? OnError { get; set; }
+
+    /// <summary>Replaces every value outside its range by the nearest bound or the default, and logs each one.</summary>
+    internal void Normalize(ILogger? logger)
+    {
+        var defaults = new AnalyticsAdvancedOptions();
+
+        if (FlushInterval <= TimeSpan.Zero || FlushInterval > MaxFlushInterval)
+            FlushInterval = Replaced(nameof(FlushInterval), FlushInterval, $"]0, {MaxFlushInterval}]", defaults.FlushInterval);
+        if (RateWindow <= TimeSpan.Zero)
+            RateWindow = Replaced(nameof(RateWindow), RateWindow, "> 0", defaults.RateWindow);
+        if (RequestTimeout <= TimeSpan.Zero)
+            RequestTimeout = Replaced(nameof(RequestTimeout), RequestTimeout, "> 0", defaults.RequestTimeout);
+        if (BatchSize is < 1 or > Clean.MaxEventsPerBatch)
+            BatchSize = Replaced(nameof(BatchSize), BatchSize, $"[1, {Clean.MaxEventsPerBatch}]", Math.Clamp(BatchSize, 1, Clean.MaxEventsPerBatch));
+        if (QueueCapacity < 1)
+            QueueCapacity = Replaced(nameof(QueueCapacity), QueueCapacity, ">= 1", defaults.QueueCapacity);
+        if (MaxAttempts < 1)
+            MaxAttempts = Replaced(nameof(MaxAttempts), MaxAttempts, ">= 1", 1);
+        if (SpoolCapacity < 0)
+            SpoolCapacity = Replaced(nameof(SpoolCapacity), SpoolCapacity, ">= 0", 0);
+
+        T Replaced<T>(string name, T value, string range, T used)
+        {
+            logger?.LogWarning("analytics: {Option} = {Value} is outside {Range}, using {Used}", name, value, range, used);
+            return used;
+        }
+    }
+
+    // The ceiling of a PeriodicTimer period is just under 50 days.
+    static readonly TimeSpan MaxFlushInterval = TimeSpan.FromDays(30);
 }
+
+/// <summary>Receives every loss reported by the client.</summary>
+/// <param name="exception">The transport exception, or null when the loss has none.</param>
+/// <param name="reason">What happened, in a sentence.</param>
+/// <param name="permanent">True when the events are dropped, false when they are kept for the next flush.</param>
+public delegate void AnalyticsErrorHandler(Exception? exception, string reason, bool permanent);

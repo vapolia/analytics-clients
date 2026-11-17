@@ -8,8 +8,8 @@ namespace Vapolia.Analytics.Client;
 /// The installation id and the device context of a mobile app.
 /// </summary>
 /// <remarks>
-/// The id lives in the app's own preferences <c>SharedPreferences</c> on Android, <c>NSUserDefaults</c> on iOS,
-/// so it does not survive the app being deleted, so the InstallId does not outlive the installation, which is a legal constraint.
+/// The id lives in the app's own preferences: <c>SharedPreferences</c> on Android, <c>NSUserDefaults</c> on iOS.
+/// A device backup restores them, so a reinstalled or migrated app keeps its id until <see cref="AnalyticsAdvancedOptions.InstallIdLifetime"/> ends.
 /// </remarks>
 sealed class MobileInstallContext : IMobileInstallContext
 {

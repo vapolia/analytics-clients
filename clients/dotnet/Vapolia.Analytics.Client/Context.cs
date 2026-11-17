@@ -16,7 +16,7 @@ public interface IAnalyticsContext
 {
     /// <summary>
     /// The context as it stands now. Null or empty sends none. Scalars only: string (≤64 chars),
-    /// finite number, bool — and enums, stored by name.
+    /// finite number, bool — and enums, stored by name, and Guids, dates and times, stored as text.
     /// </summary>
     IReadOnlyDictionary<string, object?>? GetContext();
 }

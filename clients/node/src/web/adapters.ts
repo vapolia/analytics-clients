@@ -3,8 +3,11 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 /** What the web layer reads from a request and writes to its response. */
 export interface RequestAdapter {
   cookie(name: string): string | undefined;
-  /** Sets a first-party cookie, HttpOnly, Secure, SameSite=Lax, path `/`. A zero lifetime deletes it. */
-  setCookie(name: string, value: string, maxAgeSeconds: number): void;
+  /**
+   * Sets a first-party cookie, HttpOnly, Secure, SameSite=Lax, path `/`. A zero lifetime deletes it.
+   * A deletion carries the same `domain` as the write, or it deletes nothing.
+   */
+  setCookie(name: string, value: string, maxAgeSeconds: number, domain?: string): void;
   header(name: string): string | undefined;
   /** False once the response headers are sent: a cookie can no longer be set. */
   canSetCookies(): boolean;
@@ -31,13 +34,14 @@ export function parseCookies(header: string | undefined): Map<string, string> {
   return cookies;
 }
 
-export function serializeCookie(name: string, value: string, maxAgeSeconds: number): string {
+export function serializeCookie(name: string, value: string, maxAgeSeconds: number, domain?: string): string {
   const expires = maxAgeSeconds > 0 ? new Date(Date.now() + maxAgeSeconds * 1000) : new Date(0);
   return [
     `${name}=${encodeURIComponent(value)}`,
     `Max-Age=${Math.max(0, Math.floor(maxAgeSeconds))}`,
     `Expires=${expires.toUTCString()}`,
     'Path=/',
+    ...(domain ? [`Domain=${domain}`] : []),
     'Secure',
     'HttpOnly',
     'SameSite=Lax',
@@ -49,10 +53,10 @@ export function fromNode(req: IncomingMessage, res: ServerResponse): RequestAdap
   let cookies: Map<string, string> | undefined;
   return {
     cookie: (name) => (cookies ??= parseCookies(req.headers.cookie)).get(name),
-    setCookie: (name, value, maxAgeSeconds) => {
+    setCookie: (name, value, maxAgeSeconds, domain) => {
       const previous = res.getHeader('Set-Cookie');
       const list = previous === undefined ? [] : Array.isArray(previous) ? previous : [String(previous)];
-      res.setHeader('Set-Cookie', [...list, serializeCookie(name, value, maxAgeSeconds)]);
+      res.setHeader('Set-Cookie', [...list, serializeCookie(name, value, maxAgeSeconds, domain)]);
     },
     header: (name) => {
       const value = req.headers[name.toLowerCase()];
@@ -71,8 +75,8 @@ export function fromFetch(request: Request, responseHeaders: Headers): RequestAd
   let cookies: Map<string, string> | undefined;
   return {
     cookie: (name) => (cookies ??= parseCookies(request.headers.get('cookie') ?? undefined)).get(name),
-    setCookie: (name, value, maxAgeSeconds) =>
-      responseHeaders.append('Set-Cookie', serializeCookie(name, value, maxAgeSeconds)),
+    setCookie: (name, value, maxAgeSeconds, domain) =>
+      responseHeaders.append('Set-Cookie', serializeCookie(name, value, maxAgeSeconds, domain)),
     header: (name) => request.headers.get(name) ?? undefined,
     canSetCookies: () => true,
     remoteAddress: () => undefined,

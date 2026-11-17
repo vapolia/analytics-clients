@@ -101,8 +101,11 @@ static class Clean
         return address.ToString();
     }
 
-    /// <summary>Scalars only, capped in count and in length. Keys are cleaned like the values.</summary>
-    public static Dictionary<string, PropValue>? Props(IReadOnlyDictionary<string, object?>? props, int maxKeys = MaxPropsPerEvent)
+    /// <summary>
+    /// Scalars only, capped in count and in length. Keys are cleaned like the values. <c>dropped</c> receives the key and the reason
+    /// of each pair left out. A null or blank value is an omission, not a drop.
+    /// </summary>
+    public static Dictionary<string, PropValue>? Props(IReadOnlyDictionary<string, object?>? props, int maxKeys = MaxPropsPerEvent, Action<string, string>? dropped = null)
     {
         if (props is null || props.Count == 0)
             return null;
@@ -111,11 +114,17 @@ static class Clean
         foreach (var (rawKey, value) in props)
         {
             if (kept.Count == maxKeys)
+            {
+                dropped?.Invoke(rawKey, $"more than {maxKeys} keys");
                 break;
+            }
 
             var key = Text(rawKey, MaxValueLength).ToString();
             if (key.Length == 0)
+            {
+                dropped?.Invoke(rawKey, "empty key");
                 continue;
+            }
 
             switch (value)
             {
@@ -125,6 +134,22 @@ static class Clean
                 case Enum e when Text(e.ToString(), MaxValueLength) is { IsEmpty: false } named:
                     kept[key] = PropValue.From(named.ToString());
                     break;
+                case Guid g:
+                    kept[key] = PropValue.From(g.ToString("D"));
+                    break;
+                // ISO 8601, UTC, to the millisecond.
+                case DateTimeOffset at:
+                    kept[key] = PropValue.From(at.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", System.Globalization.CultureInfo.InvariantCulture));
+                    break;
+                case DateTime at:
+                    kept[key] = PropValue.From(at.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", System.Globalization.CultureInfo.InvariantCulture));
+                    break;
+                case DateOnly date:
+                    kept[key] = PropValue.From(date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
+                    break;
+                case TimeOnly time:
+                    kept[key] = PropValue.From(time.ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture));
+                    break;
                 case bool b:
                     kept[key] = PropValue.From(b);
                     break;
@@ -133,6 +158,13 @@ static class Clean
                     var number = c.ToDouble(null);
                     if (double.IsFinite(number))
                         kept[key] = PropValue.From(number);
+                    else
+                        dropped?.Invoke(key, "not a finite number");
+                    break;
+                case null or string or Enum:
+                    break;
+                default:
+                    dropped?.Invoke(key, $"unsupported type {value.GetType().Name}");
                     break;
             }
         }

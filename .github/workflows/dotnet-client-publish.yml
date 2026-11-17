@@ -81,7 +81,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: '11.0.x'
 
       # Only this project multi-targets android/ios/maccatalyst, and restoring it evaluates every
       # entry, so its own TFMs name the workloads to install.
@@ -89,7 +89,7 @@ jobs:
 
       # A version is published once and cannot be taken back, so the tests run here too.
       - name: Test
-        run: dotnet run --project $TESTS -c Release
+        run: dotnet test --project $TESTS -c Release
 
       # Two packages: the app half, and the ASP.NET Core half that depends on it.
       # /p:Version overrides the <Version> in the csproj, so the tag is the single source of truth.

@@ -4,7 +4,7 @@
     <!-- The server half, apart from the base package: the cookie identity, the middleware and the
          hosted flush are the only pieces that need ASP.NET Core, and none of them has any business being
          resolved into a mobile app. -->
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
 
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>

@@ -13,7 +13,7 @@ namespace Vapolia\Analytics;
  */
 class Analytics
 {
-    public const VERSION = '1.1.0';
+    public const VERSION = '1.2.0';
 
     // Limits mirrored from the collector, which applies them again on arrival.
     public const MAX_EVENTS_PER_BATCH = 100;
@@ -22,6 +22,9 @@ class Analytics
     public const MAX_VALUE_LENGTH = 64;
 
     private const DAY_MS = 86400000;
+    // The names before the prefixes. The move to the current names can be removed from 2027-01-01.
+    private const LEGACY_COOKIE_NAME = '_vau';
+    private const LEGACY_OPT_OUT_COOKIE_NAME = '_vau_off';
 
     /**
      * The default answer for `requiresPriorConsent`: the EEA outside France, Italy, Spain and the
@@ -58,6 +61,9 @@ class Analytics
     {
         $advanced = $options['advanced'] ?? [];
         $web = $options['web'] ?? [];
+        $cookieDomain = isset($web['cookieDomain']) && (string)$web['cookieDomain'] !== '' ? (string)$web['cookieDomain'] : null;
+        // `__Host-` forbids a domain, `__Secure-` allows one.
+        $cookiePrefix = $cookieDomain === null ? '__Host-' : '__Secure-';
 
         $this->options = [
             'ingestionUrl' => rtrim((string)($options['ingestionUrl'] ?? ''), '/'),
@@ -75,8 +81,9 @@ class Analytics
             'logger' => $advanced['logger'] ?? null,
             'onError' => $advanced['onError'] ?? null,
             'sendOnShutdown' => (bool)($advanced['sendOnShutdown'] ?? true),
-            'cookieName' => (string)($web['cookieName'] ?? '_vau'),
-            'optOutCookieName' => (string)($web['optOutCookieName'] ?? '_vau_off'),
+            'cookieDomain' => $cookieDomain,
+            'cookieName' => (string)($web['cookieName'] ?? $cookiePrefix . 'vau'),
+            'optOutCookieName' => (string)($web['optOutCookieName'] ?? $cookiePrefix . 'vau_off'),
             'requiresPriorConsentForLocale' => $web['requiresPriorConsentForLocale'] ?? null,
             'timeZoneOffset' => $web['timeZoneOffset'] ?? null,
             'clientAddress' => $web['clientAddress'] ?? null,
@@ -183,6 +190,8 @@ class Analytics
             return $this->answer;
 
         $cookie = $this->readCookie($this->options['optOutCookieName']);
+        if ($cookie === null)
+            $cookie = $this->migrateLegacyConsent();
         if ($cookie === '1')
             return false;
         if ($cookie === '0')
@@ -200,7 +209,9 @@ class Analytics
         $this->answer = !$value;
 
         if ($value) {
-            $installId = $this->installId ?? self::installId($this->readCookie($this->options['cookieName']));
+            $installId = $this->installId
+                ?? self::installId($this->readCookie($this->options['cookieName']))
+                ?? self::installId($this->readCookie(self::LEGACY_COOKIE_NAME));
             $this->installId = null;
             if ($installId !== null)
                 $this->queue = array_values(array_filter($this->queue, fn($item) => $item['installId'] !== $installId));
@@ -213,13 +224,16 @@ class Analytics
 
         $expires = time() + intdiv($this->options['optOutLifetimeMs'], 1000);
         // "0", not a deletion: an acceptance has to outrank requiresPriorConsent on the next request.
-        $this->writeCookie($this->options['optOutCookieName'], $value ? '1' : '0', $expires);
-        if ($value)
-            $this->writeCookie($this->options['cookieName'], '', 1);
+        $this->writeCookie($this->options['optOutCookieName'], $value ? '1' : '0', $expires, $this->options['cookieDomain']);
+        if ($value) {
+            $this->writeCookie($this->options['cookieName'], '', 1, $this->options['cookieDomain']);
+            if ($this->options['cookieName'] !== self::LEGACY_COOKIE_NAME)
+                $this->writeCookie(self::LEGACY_COOKIE_NAME, '', 1);
+        }
     }
 
     /**
-     * The visitor's id, from the `_vau` cookie, created when missing and the output has not started.
+     * The visitor's id, from the identity cookie, created when missing and the output has not started.
      * Null when opposed, not answered under a prior-consent regime, or outside an HTTP request.
      */
     public function getInstallId(): ?string
@@ -243,6 +257,18 @@ class Analytics
         if ($fromCookie !== null)
             return $this->installId = $fromCookie;
 
+        $legacy = $this->options['cookieName'] !== self::LEGACY_COOKIE_NAME
+            ? self::installId($this->readCookie(self::LEGACY_COOKIE_NAME))
+            : null;
+        if ($legacy !== null) {
+            // One-time migration: the id is kept, the cookie moves to its new name.
+            if (!$this->headersSent()) {
+                $this->writeCookie($this->options['cookieName'], $legacy, time() + intdiv($this->options['installIdLifetimeMs'], 1000), $this->options['cookieDomain']);
+                $this->writeCookie(self::LEGACY_COOKIE_NAME, '', 1);
+            }
+            return $this->installId = $legacy;
+        }
+
         // A cookie can only be set before the output starts. The visitor is then measured on the
         // next request.
         if ($this->headersSent())
@@ -251,7 +277,7 @@ class Analytics
         $issued = self::uuid();
         // Absolute, from this moment. Never extended on a later visit: the rotation is the browser
         // dropping the cookie.
-        $this->writeCookie($this->options['cookieName'], $issued, time() + intdiv($this->options['installIdLifetimeMs'], 1000));
+        $this->writeCookie($this->options['cookieName'], $issued, time() + intdiv($this->options['installIdLifetimeMs'], 1000), $this->options['cookieDomain']);
         return $this->installId = $issued;
     }
 
@@ -317,15 +343,41 @@ class Analytics
         return is_string($value) ? $value : null;
     }
 
-    protected function writeCookie(string $name, string $value, int $expires): void
+    /** A deletion carries the same `$domain` as the write, otherwise the browser keeps the cookie. */
+    protected function writeCookie(string $name, string $value, int $expires, ?string $domain = null): void
     {
-        setcookie($name, $value, [
+        $attributes = [
             'expires' => $expires,
             'path' => '/',
             'secure' => true,
             'httponly' => true,
             'samesite' => 'Lax',
-        ]);
+        ];
+        if ($domain !== null)
+            $attributes['domain'] = $domain;
+        setcookie($name, $value, $attributes);
+    }
+
+    /**
+     * Reads the consent answer from the legacy `_vau_off` cookie when the current one is absent,
+     * and moves it to the current name when the output has not started. Returns '0', '1' or null.
+     */
+    private function migrateLegacyConsent(): ?string
+    {
+        if ($this->options['optOutCookieName'] === self::LEGACY_OPT_OUT_COOKIE_NAME)
+            return null;
+
+        $legacy = $this->readCookie(self::LEGACY_OPT_OUT_COOKIE_NAME);
+        if ($legacy !== '0' && $legacy !== '1')
+            return null;
+
+        if (!$this->headersSent()) {
+            $this->writeCookie($this->options['optOutCookieName'], $legacy, time() + intdiv($this->options['optOutLifetimeMs'], 1000), $this->options['cookieDomain']);
+            $this->writeCookie(self::LEGACY_OPT_OUT_COOKIE_NAME, '', 1);
+        }
+        // Memoized, so the rewrite happens once per request.
+        $this->answer = $legacy === '0';
+        return $legacy;
     }
 
     protected function headersSent(): bool

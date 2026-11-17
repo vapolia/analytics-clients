@@ -181,6 +181,13 @@ A website serves every regime at once, so it decides per request, from the `Acce
 identity cookie is written until that visitor accepts. `AnalyticsWebOptions.RequiresPriorConsentForLocale`
 is where a site answers that itself. A JavaScript front end served by an ASP.NET Core backend reads the regime and the answer from the `GET state` endpoint of `MapAnalyticsRelay`.
 
+The .NET, Node and PHP web clients store the visitor id and the answer in two cookies, `__Host-vau` and `__Host-vau_off`, which stay
+on the host that set them. To share them with the subdomains of a site, set the cookie domain option (`WebOptions.CookieDomain` in
+.NET, `cookieDomain` in Node and PHP) to `.example.com`: the cookies are then named `__Secure-vau` and `__Secure-vau_off`.
+
+The .NET and Node relays keep 30 events per minute for one visitor address. Behind a proxy, give the relay the visitor's address:
+the `ForwardedHeaders` middleware in ASP.NET Core, the `clientAddress` web option in Node.
+
 Both buttons carry the same style, the same size and the same prominence. A refusal placed one level
 below the acceptance is what the CNIL fined Google and Facebook for in 2021.
 

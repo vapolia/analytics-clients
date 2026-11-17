@@ -41,7 +41,7 @@ static class Preferences
     static Dictionary<string, string>? cache;
     static readonly Lock FileGate = new();
 
-    static string Path => System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"vapolia-analytics-identity.json");
+    static string Path => AppDataFolder.PathOf("vapolia-analytics-identity.json");
 
     public static string? Get(string key)
     {
@@ -90,6 +90,7 @@ static class Preferences
     {
         try
         {
+            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path)!);
             File.WriteAllText(Path, System.Text.Json.JsonSerializer.Serialize(cache!, AnalyticsJsonContext.Default.DictionaryStringString));
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
@@ -99,6 +100,26 @@ static class Preferences
 #endif
 }
 
+/// <summary>
+/// Locates the client's own files: the spool, and on desktop the identity.
+/// </summary>
+/// <remarks>
+/// On Android, iOS and Mac Catalyst the local application data folder belongs to the app. Elsewhere every app of the user shares it,
+/// so the files go in a folder named after the app.
+/// </remarks>
+static class AppDataFolder
+{
+    public static string PathOf(string fileName)
+    {
+        var root = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+#if ANDROID || IOS || MACCATALYST
+        return Path.Combine(root, fileName);
+#else
+        var app = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name ?? AppDomain.CurrentDomain.FriendlyName;
+        return Path.Combine(root, app, fileName);
+#endif
+    }
+}
 /// <summary>
 /// The device context, read from the device itself: the region setting, and nothing else. No
 /// hardware id, no IDFA/GAID, no geolocation. The platform and the build are the build token's

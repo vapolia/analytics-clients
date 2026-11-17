@@ -34,6 +34,7 @@ MobileAnalytics.Start(new AnalyticsOptions { IngestionUrl = new("https://analyti
 MobileAnalytics.Current.Track(...);
 ```
 
+The packages target .NET 10 and .NET 11. `net10.0` below stands for either.
 The app half works on the platform targets only: `net10.0-android`, `net10.0-ios`, `net10.0-maccatalyst` and `net10.0-windows`.
 On plain `net10.0`, `MobileAnalytics`, `MobileInstallIdentityProvider` and `IAppLifecycle` exist as no-op stubs, so a library that also targets `net10.0` compiles without `#if`.
 `UseAnalytics` and `AddAnalytics` for apps are the exception: a project that also targets plain `net10.0` puts them behind `#if ANDROID || IOS || MACCATALYST || WINDOWS`.
@@ -230,9 +231,13 @@ Two consequences:
 
 | | |
 |---|---|
-| **Install id** | A first-party cookie (`_vau`, HttpOnly, Secure, SameSite=Lax) that the server sets once. It expires after 13 months. |
+| **Install id** | A first-party cookie (`__Host-vau`, HttpOnly, Secure, SameSite=Lax) that the server sets once. It expires after 13 months. |
 | **Country** | Automatically extracted from `Accept-Language`, never from IP geolocation. |
-| **Opposition** | A second cookie, `_vau_off`: `1` opposed, `0` accepted, absent unanswered. Refreshed on each visit. |
+| **Opposition** | A second cookie, `__Host-vau_off`: `1` opposed, `0` accepted, absent unanswered. Refreshed on each visit. |
+
+Both cookies stay on the host that set them. To share them with the subdomains of a site, set `WebOptions.CookieDomain` to `.example.com`: they are then named `__Secure-vau` and `__Secure-vau_off`.
+`WebOptions.CookieName` and `WebOptions.OptOutCookieName` replace these names.
+A visitor holding the earlier `_vau` and `_vau_off` cookies keeps the id and the answer: the next request writes them under the current names and deletes the earlier ones.
 
 Right of opposition: inject `IInstallContext` and set `IsOptedOut` from a server-rendered form post. The events of that visitor still in the queue are discarded.
 
@@ -267,7 +272,7 @@ builder.Services.AddAnalytics(o =>
 ```
 
 Until that visitor accepts, no identity cookie is written and nothing is sent. 
-Accepting writes `_vau_off=0`, which outranks the default on the next request.
+Accepting writes `__Host-vau_off=0`, which outranks the default on the next request.
 
 Both cookies are HttpOnly, so a banner script cannot read them. `MapAnalyticsRelay` serves this state, or return it from an endpoint of your own with `IInstallContext`:
 
@@ -295,6 +300,10 @@ A site whose pages are rendered elsewhere (Next.js, a SPA) posts its events to t
 
 Only the declared events and their declared keys are relayed. Anything else is dropped silently, as are events beyond `MaxEventsPerRequest` (20) and bodies over `MaxBodyBytes` (64 KB).
 
+The relay keeps 30 events per minute for one visitor address, and drops the rest until the minute ends. An IPv6 address counts as its /64.
+`MaxEventsPerAddress` and `RateWindow` change the ceiling, and `MaxEventsPerAddress = 0` removes it.
+The address is `Connection.RemoteIpAddress`: behind a proxy, add the `ForwardedHeaders` middleware, or every visitor shares the proxy's ceiling.
+
 ```csharp
 app.MapAnalyticsRelay("/api/web/analytics", o =>
 {
@@ -307,7 +316,7 @@ app.MapAnalyticsRelay("/api/web/analytics", o =>
     o.Event("session_start");
     o.Event("content_viewed", "content_type", "content_id", "duration_s");
     o.Event("route_shared", "content_id").With("content_type", "route");
-}).RequireRateLimiting("analytics");
+});
 ```
 
 The browser side:
@@ -418,10 +427,10 @@ Same contract as the other clients:
 ```bash
 dotnet build clients/dotnet/Vapolia.Analytics.Client/Vapolia.Analytics.Client.csproj -f net10.0
 dotnet build clients/dotnet/Vapolia.Analytics.Client.AspNetCore/Vapolia.Analytics.Client.AspNetCore.csproj
-dotnet run --project clients/dotnet/Vapolia.Analytics.Client.Tests/Vapolia.Analytics.Client.Tests.csproj
+dotnet test --project clients/dotnet/Vapolia.Analytics.Client.Tests/Vapolia.Analytics.Client.Tests.csproj
 ```
 
-Tests use MTP, use `dotnet run`, not `dotnet test`.
+Tests use MTP and run once per target framework. `dotnet run` takes one with `-f net10.0` or `-f net11.0`.
 
 JSON goes through `System.Text.Json` [source generation](https://learn.microsoft.com/dotnet/standard/serialization/system-text-json/source-generation) (`AnalyticsJsonContext`), so the packages stay trim- and AOT-safe.
 

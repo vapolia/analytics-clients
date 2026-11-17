@@ -23,11 +23,11 @@ public class CookieIdentityTests
 
         var cookies = new List<string>();
         if (cookie is not null)
-            cookies.Add($"{options.WebOptions.CookieName}={cookie}");
+            cookies.Add($"{options.WebOptions.IdCookie}={cookie}");
         if (optedOut)
-            cookies.Add($"{options.WebOptions.OptOutCookieName}=1");
+            cookies.Add($"{options.WebOptions.AnswerCookie}=1");
         if (accepted)
-            cookies.Add($"{options.WebOptions.OptOutCookieName}=0");
+            cookies.Add($"{options.WebOptions.AnswerCookie}=0");
         if (cookies.Count > 0)
             context.Request.Headers.Cookie = string.Join("; ", cookies);
 
@@ -100,9 +100,9 @@ public class CookieIdentityTests
         provider.IsOptedOut = true;
 
         var setCookie = context.Response.Headers.SetCookie.ToString();
-        Assert.IsTrue(setCookie.Contains("_vau_off=1", StringComparison.Ordinal), setCookie);
+        Assert.IsTrue(setCookie.Contains("__Host-vau_off=1", StringComparison.Ordinal), setCookie);
         // Deleting a cookie is expiring it in the past.
-        Assert.IsTrue(setCookie.Contains("_vau=;", StringComparison.Ordinal), setCookie);
+        Assert.IsTrue(setCookie.Contains("__Host-vau=;", StringComparison.Ordinal), setCookie);
     }
 
     [TestMethod]
@@ -114,7 +114,84 @@ public class CookieIdentityTests
 
         var setCookie = context.Response.Headers.SetCookie.ToString();
         // "0", not a deletion: the acceptance has to outrank RequiresPriorConsent on the next request.
-        Assert.IsTrue(setCookie.Contains("_vau_off=0", StringComparison.Ordinal), setCookie);
+        Assert.IsTrue(setCookie.Contains("__Host-vau_off=0", StringComparison.Ordinal), setCookie);
+    }
+
+    [TestMethod]
+    public void ADomainSwitchesToTheSecurePrefix()
+    {
+        var (provider, context) = Create(configure: o => o.WebOptions.CookieDomain = ".example.com");
+
+        var id = provider.InstallId;
+
+        var setCookie = context.Response.Headers.SetCookie.ToString();
+        Assert.IsTrue(setCookie.StartsWith($"__Secure-vau={id}", StringComparison.Ordinal), setCookie);
+        Assert.IsTrue(setCookie.Contains("domain=.example.com", StringComparison.OrdinalIgnoreCase), setCookie);
+    }
+
+    [TestMethod]
+    public void TheHostPrefixCarriesNoDomain()
+    {
+        var (provider, context) = Create();
+
+        var id = provider.InstallId;
+
+        var setCookie = context.Response.Headers.SetCookie.ToString();
+        Assert.IsTrue(setCookie.StartsWith($"__Host-vau={id}", StringComparison.Ordinal), setCookie);
+        Assert.IsTrue(setCookie.Contains("path=/", StringComparison.OrdinalIgnoreCase), setCookie);
+        Assert.IsFalse(setCookie.Contains("domain=", StringComparison.OrdinalIgnoreCase), setCookie);
+    }
+
+    [TestMethod]
+    public void AnExplicitNameIsKept()
+    {
+        var (provider, context) = Create(configure: o => o.WebOptions.CookieName = "visitor");
+
+        var id = provider.InstallId;
+
+        Assert.IsTrue(context.Response.Headers.SetCookie.ToString().StartsWith($"visitor={id}", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void ALegacyIdIsMovedToTheCurrentName()
+    {
+        var (provider, context) = Create();
+        context.Request.Headers.Cookie = $"_vau={InstallId}";
+
+        Assert.AreEqual(InstallId, provider.InstallId);
+        Assert.AreEqual(InstallId, provider.InstallId);
+
+        var setCookies = context.Response.Headers.SetCookie.ToArray();
+        Assert.HasCount(2, setCookies);
+        Assert.IsTrue(setCookies[0]!.StartsWith($"__Host-vau={InstallId}", StringComparison.Ordinal), setCookies[0]);
+        Assert.IsTrue(setCookies[1]!.StartsWith("_vau=;", StringComparison.Ordinal), setCookies[1]);
+    }
+
+    [TestMethod]
+    public void ALegacyAnswerIsMovedToTheCurrentName()
+    {
+        var (provider, context) = Create();
+        context.Request.Headers.Cookie = "_vau_off=1";
+
+        Assert.IsTrue(provider.IsOptedOut);
+        Assert.IsTrue(provider.IsOptedOut);
+
+        var setCookies = context.Response.Headers.SetCookie.ToArray();
+        Assert.HasCount(2, setCookies);
+        Assert.IsTrue(setCookies[0]!.StartsWith("__Host-vau_off=1", StringComparison.Ordinal), setCookies[0]);
+        Assert.IsTrue(setCookies[1]!.StartsWith("_vau_off=;", StringComparison.Ordinal), setCookies[1]);
+    }
+
+    [TestMethod]
+    public void OpposingDeletesTheLegacyIdToo()
+    {
+        var (provider, context) = Create(cookie: InstallId);
+
+        provider.IsOptedOut = true;
+
+        var setCookies = context.Response.Headers.SetCookie.ToArray();
+        Assert.IsTrue(setCookies.Any(c => c!.StartsWith("__Host-vau=;", StringComparison.Ordinal)), string.Join(" | ", setCookies));
+        Assert.IsTrue(setCookies.Any(c => c!.StartsWith("_vau=;", StringComparison.Ordinal)), string.Join(" | ", setCookies));
     }
 
     /// A country that asks first: no identity cookie until the banner accepts.
@@ -278,7 +355,7 @@ public class CookieIdentityTests
         await using var sender = new Sender(options, collector, null, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
 
         var context = new DefaultHttpContext();
-        context.Request.Headers.Cookie = $"{options.WebOptions.CookieName}={InstallId}";
+        context.Request.Headers.Cookie = $"{options.WebOptions.IdCookie}={InstallId}";
         var provider = new CookieInstallIdentityProvider(new HttpContextAccessor { HttpContext = context }, Options.Create(options))
         {
             Sender = () => sender,

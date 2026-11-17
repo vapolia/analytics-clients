@@ -125,7 +125,7 @@ the device:
 | [Swift](swift/README.md) | A random UUID in `UserDefaults` (not the Keychain, which would outlive the install), renewed after 390 days |
 | [JS / Expo](js/README.md) | A random UUID in AsyncStorage, renewed after 390 days |
 | [.NET mobile](dotnet/README.md) | A random GUID in the platform preferences (a file on Windows), renewed after 390 days |
-| [.NET web](dotnet/README.md) | A first-party cookie `_vau`, HttpOnly, **13 months, expiry never refreshed** |
+| [.NET web](dotnet/README.md) | A first-party cookie `__Host-vau`, HttpOnly, **13 months, expiry never refreshed** |
 | [Go](go/README.md) | Nothing: the id is supplied by the app that calls it |
 
 On the web that means naming the cookie, its purpose, its lifetime, and the fact that it is

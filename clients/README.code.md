@@ -40,14 +40,13 @@ one client without the others is a divergence to fix, not a feature.
 
 | Client | Command |
 |---|---|
-| .NET | `dotnet run --project clients/dotnet/Vapolia.Analytics.Client.Tests` |
+| .NET | `dotnet test --project clients/dotnet/Vapolia.Analytics.Client.Tests` |
 | Kotlin | `./gradlew :analytics:testDebugUnitTest`, from `clients/kotlin` |
 | Swift | `swift test`, on macOS, from the repository root where `Package.swift` lives |
 | JS | `pnpm test`, from `clients/js` |
 | Go | `go test ./...`, from `clients/go` |
 
-The .NET tests run on Microsoft Testing Platform: the test project is an executable and is run as
-one. `dotnet test` reports "Zero tests ran".
+The .NET tests run on Microsoft Testing Platform, once per target framework: `net10.0` and `net11.0`.
 
 ## The unanswered state
 

@@ -183,6 +183,84 @@ public class RelayTests
     }
 
     [TestMethod]
+    public async Task EventsBeyondTheAddressCeilingAreDropped()
+    {
+        var options = Options(o =>
+        {
+            o.Event("a");
+            o.MaxEventsPerAddress = 3;
+        });
+
+        async Task<int> Post(string address)
+        {
+            var (context, recorder, _) = Request("""[{"name":"a"},{"name":"a"}]""");
+            context.Connection.RemoteIpAddress = System.Net.IPAddress.Parse(address);
+            await AnalyticsRelayExtensions.Events(context, options);
+            Assert.AreEqual(204, context.Response.StatusCode);
+            return recorder.Tracked.Count;
+        }
+
+        Assert.AreEqual(2, await Post("203.0.113.7"));
+        Assert.AreEqual(1, await Post("203.0.113.7"));
+        Assert.AreEqual(0, await Post("203.0.113.7"));
+        Assert.AreEqual(2, await Post("203.0.113.8"));
+
+        // One /64 is one visitor.
+        Assert.AreEqual(2, await Post("2001:db8:1:2::1"));
+        Assert.AreEqual(1, await Post("2001:db8:1:2:ffff::9"));
+        Assert.AreEqual(2, await Post("2001:db8:1:3::1"));
+    }
+
+    [TestMethod]
+    public async Task TheAddressCeilingEndsWithItsWindow()
+    {
+        var start = DateTimeOffset.UtcNow;
+        var clock = new ManualClock(start);
+        var options = Options(o =>
+        {
+            o.Event("a");
+            o.MaxEventsPerAddress = 1;
+            o.Time = clock;
+        });
+
+        async Task<int> Post()
+        {
+            var (context, recorder, _) = Request("""{"name":"a"}""");
+            context.Connection.RemoteIpAddress = System.Net.IPAddress.Parse("203.0.113.7");
+            await AnalyticsRelayExtensions.Events(context, options);
+            return recorder.Tracked.Count;
+        }
+
+        Assert.AreEqual(1, await Post());
+        Assert.AreEqual(0, await Post());
+        clock.Now = start.AddMinutes(1);
+        Assert.AreEqual(1, await Post());
+    }
+
+    [TestMethod]
+    public async Task ZeroDisablesTheAddressCeiling()
+    {
+        var options = Options(o =>
+        {
+            o.Event("a");
+            o.MaxEventsPerAddress = 0;
+            o.MaxEventsPerRequest = 50;
+        });
+        var (context, recorder, _) = Request("[" + string.Join(",", Enumerable.Repeat("""{"name":"a"}""", 40)) + "]");
+        context.Connection.RemoteIpAddress = System.Net.IPAddress.Parse("203.0.113.7");
+
+        await AnalyticsRelayExtensions.Events(context, options);
+
+        Assert.HasCount(40, recorder.Tracked);
+    }
+
+    sealed class ManualClock(DateTimeOffset now) : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = now;
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
+
+    [TestMethod]
     public void NullAnalyticsAnswersTheState()
     {
         IInstallContext install = NullAnalytics.Instance;

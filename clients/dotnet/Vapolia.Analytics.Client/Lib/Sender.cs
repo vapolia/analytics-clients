@@ -38,6 +38,8 @@ sealed class Sender : IAsyncDisposable
         this.logger = logger;
         this.time = time ?? TimeProvider.System;
 
+        options.AdvancedOptions.Normalize(logger);
+
         channel = Channel.CreateBounded<Command>(new BoundedChannelOptions(options.AdvancedOptions.QueueCapacity)
         {
             // Never block a caller: Track uses TryWrite and counts the refusal itself.
@@ -56,6 +58,16 @@ sealed class Sender : IAsyncDisposable
         Interlocked.Read(ref requests));
 
     public void Reject() => Interlocked.Increment(ref rejected);
+
+    /// <summary>Logs a prop or a context key left out of an event, once per event name, key and reason.</summary>
+    public void ReportDroppedProp(string eventName, string key, string reason)
+    {
+        // Capped: event names and keys come from the app, and a relay forwards what a browser sent.
+        if (droppedProps.Count < 256 && droppedProps.TryAdd((eventName, key, reason), 0))
+            logger.LogWarning("analytics: {Event}: prop {Key} dropped: {Reason}", eventName, key, reason);
+    }
+
+    readonly System.Collections.Concurrent.ConcurrentDictionary<(string, string, string), byte> droppedProps = new();
 
     /// <summary>Queues one event. Never blocks, never throws: a refusal is only a counter.</summary>
     public void Track(Pending pending)

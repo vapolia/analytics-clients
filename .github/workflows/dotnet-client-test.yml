@@ -41,7 +41,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: '11.0.x'
 
       - run: dotnet workload install android ios maccatalyst --skip-sign-check
 
@@ -50,6 +50,6 @@ jobs:
           dotnet build $CLIENT -c Release
           dotnet build $ASPNETCORE -c Release
 
-      # MTP: run the test project, do not `dotnet test` it.
+      # Runs the tests once per target framework of the test project.
       - name: Test
-        run: dotnet run --project $TESTS -c Release
+        run: dotnet test --project $TESTS -c Release

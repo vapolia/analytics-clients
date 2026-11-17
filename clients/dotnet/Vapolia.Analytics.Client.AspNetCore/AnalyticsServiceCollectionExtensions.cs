@@ -52,6 +52,7 @@ public static class AnalyticsServiceCollectionExtensions
         services.AddHttpClient(HttpClientName, (provider, http) =>
         {
             var options = provider.GetRequiredService<IOptions<AnalyticsOptions>>().Value;
+            options.AdvancedOptions.Normalize(provider.GetService<ILogger<IAnalytics>>());
             http.Timeout = options.AdvancedOptions.RequestTimeout;
         });
 

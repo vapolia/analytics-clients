@@ -1,4 +1,3 @@
-using System.Globalization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -41,7 +40,7 @@ public sealed class CookieInstallIdentityProvider(IHttpContextAccessor accessor,
             {
                 var installId = context.Items.TryGetValue(ItemKey, out var cached) && cached is string id
                     ? id
-                    : Clean.InstallId(context.Request.Cookies[options.WebOptions.CookieName]);
+                    : Clean.InstallId(context.Request.Cookies[Web.IdCookie]) ?? LegacyInstallId(context);
                 context.Items.Remove(ItemKey);
                 if (installId is not null)
                     Sender?.Invoke()?.Purge(installId);
@@ -53,32 +52,41 @@ public sealed class CookieInstallIdentityProvider(IHttpContextAccessor accessor,
                 return;
             }
 
+            // "0", not a deletion: an acceptance has to outrank RequiresPriorConsent on the next request.
+            context.Response.Cookies.Append(Web.AnswerCookie, value ? "1" : "0", Cookie(options.AdvancedOptions.OptOutLifetime));
+            if (Web.AnswerCookie != AnalyticsWebOptions.LegacyAnswerCookie)
+                DeleteLegacy(context, AnalyticsWebOptions.LegacyAnswerCookie);
+
             if (value)
             {
-                context.Response.Cookies.Append(options.WebOptions.OptOutCookieName, "1", new CookieOptions
-                {
-                    HttpOnly = true,
-                    Secure = true,
-                    SameSite = SameSiteMode.Lax,
-                    IsEssential = true,
-                    Expires = DateTimeOffset.UtcNow.Add(options.AdvancedOptions.OptOutLifetime),
-                });
-
-                context.Response.Cookies.Delete(options.WebOptions.CookieName);
-                return;
+                context.Response.Cookies.Delete(Web.IdCookie, Cookie(TimeSpan.Zero));
+                if (Web.IdCookie != AnalyticsWebOptions.LegacyIdCookie)
+                    DeleteLegacy(context, AnalyticsWebOptions.LegacyIdCookie);
             }
-
-            // "0", not a deletion: an acceptance has to outrank RequiresPriorConsent on the next request.
-            context.Response.Cookies.Append(options.WebOptions.OptOutCookieName, "0", new CookieOptions
-            {
-                HttpOnly = true,
-                Secure = true,
-                SameSite = SameSiteMode.Lax,
-                IsEssential = true,
-                Expires = DateTimeOffset.UtcNow.Add(options.AdvancedOptions.OptOutLifetime),
-            });
         }
     }
+
+    AnalyticsWebOptions Web => options.WebOptions;
+
+    /// <summary>The attributes of both cookies, expiring <paramref name="lifetime"/> from now.</summary>
+    CookieOptions Cookie(TimeSpan lifetime) => new()
+    {
+        HttpOnly = true,
+        Secure = true,
+        SameSite = SameSiteMode.Lax,
+        IsEssential = true,
+        Path = "/",
+        Domain = string.IsNullOrEmpty(Web.CookieDomain) ? null : Web.CookieDomain,
+        Expires = DateTimeOffset.UtcNow.Add(lifetime),
+    };
+
+    /// <summary>The id held under the name used before the prefixes, when the current name is another one.</summary>
+    string? LegacyInstallId(HttpContext context)
+        => Web.IdCookie == AnalyticsWebOptions.LegacyIdCookie ? null : Clean.InstallId(context.Request.Cookies[AnalyticsWebOptions.LegacyIdCookie]);
+
+    // The legacy cookies were set on the host, with no domain.
+    static void DeleteLegacy(HttpContext context, string name)
+        => context.Response.Cookies.Delete(name, new CookieOptions { Path = "/", Secure = true });
 
     /// <summary>
     /// The visitor's answer: true accepted, false refused, null unanswered. Read from
@@ -96,7 +104,24 @@ public sealed class CookieInstallIdentityProvider(IHttpContextAccessor accessor,
             if (context.Items.TryGetValue(AnswerKey, out var answered) && answered is bool answer)
                 return answer;
 
-            return context.Request.Cookies[options.WebOptions.OptOutCookieName] switch
+            var current = Read(context.Request.Cookies[Web.AnswerCookie]);
+            if (current is not null || Web.AnswerCookie == AnalyticsWebOptions.LegacyAnswerCookie)
+                return current;
+
+            // An answer given under the legacy name is moved to the current one.
+            if (Read(context.Request.Cookies[AnalyticsWebOptions.LegacyAnswerCookie]) is not { } legacy)
+                return null;
+
+            context.Items[AnswerKey] = legacy;
+            if (!context.Response.HasStarted)
+            {
+                context.Response.Cookies.Append(Web.AnswerCookie, legacy ? "0" : "1", Cookie(options.AdvancedOptions.OptOutLifetime));
+                DeleteLegacy(context, AnalyticsWebOptions.LegacyAnswerCookie);
+            }
+
+            return legacy;
+
+            static bool? Read(string? value) => value switch
             {
                 "1" => false,
                 "0" => true,
@@ -146,11 +171,24 @@ public sealed class CookieInstallIdentityProvider(IHttpContextAccessor accessor,
             if (context.Items.TryGetValue(ItemKey, out var cached) && cached is string existing)
                 return existing;
 
-            var fromCookie = Clean.InstallId(context.Request.Cookies[options.WebOptions.CookieName]);
+            var fromCookie = Clean.InstallId(context.Request.Cookies[Web.IdCookie]);
             if (fromCookie is not null)
             {
                 context.Items[ItemKey] = fromCookie;
                 return fromCookie;
+            }
+
+            // An id held under the legacy name is moved to the current one, with a full lifetime: the only extension an id ever gets.
+            if (LegacyInstallId(context) is { } legacy)
+            {
+                context.Items[ItemKey] = legacy;
+                if (!context.Response.HasStarted)
+                {
+                    context.Response.Cookies.Append(Web.IdCookie, legacy, Cookie(options.AdvancedOptions.InstallIdLifetime));
+                    DeleteLegacy(context, AnalyticsWebOptions.LegacyIdCookie);
+                }
+
+                return legacy;
             }
 
             // A cookie can only be set before the response starts. After that the visitor is measured on
@@ -159,15 +197,8 @@ public sealed class CookieInstallIdentityProvider(IHttpContextAccessor accessor,
                 return null;
 
             var issued = Guid.NewGuid().ToString("D");
-            context.Response.Cookies.Append(options.WebOptions.CookieName, issued, new CookieOptions
-            {
-                HttpOnly = true,
-                Secure = true,
-                SameSite = SameSiteMode.Lax,
-                IsEssential = true,
-                // Absolute, from this moment. Never extended on a later visit.
-                Expires = DateTimeOffset.UtcNow.Add(options.AdvancedOptions.InstallIdLifetime),
-            });
+            // Absolute, from this moment. Never extended on a later visit.
+            context.Response.Cookies.Append(Web.IdCookie, issued, Cookie(options.AdvancedOptions.InstallIdLifetime));
 
             context.Items[ItemKey] = issued;
             return issued;
@@ -180,7 +211,7 @@ public sealed class CookieInstallIdentityProvider(IHttpContextAccessor accessor,
     /// deliberately not parsed: guessing a device class from it is fingerprinting for a column
     /// nobody reads.
     /// </summary>
-    public string? Country => RegionOf(PreferredLanguage(accessor.HttpContext));
+    public string? Country => Bcp47.Split(PreferredLanguage(accessor.HttpContext)).Region;
 
     /// <summary>
     /// The visitor's address, from <c>Connection.RemoteIpAddress</c>. Behind a proxy, the
@@ -197,26 +228,6 @@ public sealed class CookieInstallIdentityProvider(IHttpContextAccessor accessor,
         // "fr-FR,fr;q=0.9,en;q=0.8" — the first tag is the preferred one.
         var first = header.Split(',')[0].Split(';')[0].Trim();
         return first.Length == 0 ? null : first;
-    }
-
-    static string? RegionOf(string? languageTag)
-    {
-        if (string.IsNullOrEmpty(languageTag))
-            return null;
-
-        try
-        {
-            var culture = CultureInfo.GetCultureInfo(languageTag);
-            if (culture.IsNeutralCulture)
-                return null;
-
-            return new RegionInfo(culture.Name).TwoLetterISORegionName;
-        }
-        catch (Exception e) when (e is CultureNotFoundException or ArgumentException)
-        {
-            // An unreadable tag is an unknown country, never a guessed one.
-            return null;
-        }
     }
 
     /// <summary>

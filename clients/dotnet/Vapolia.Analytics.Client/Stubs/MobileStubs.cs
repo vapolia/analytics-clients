@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Vapolia.Analytics.Client;
 
-// Plain net10.0 only: for a library that also targets net10.0 compiles without #if
+// Plain net10.0 and net11.0 only: for a library that also targets them compiles without #if
 
 /// <summary>Not supported, not a platform target.</summary>
 [EditorBrowsable(EditorBrowsableState.Never)]

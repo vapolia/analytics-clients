@@ -12,6 +12,7 @@ use Vapolia\Analytics\Analytics;
 final class TestAnalytics extends Analytics
 {
     public array $cookies = [];
+    /** @var array<string, array{0: string, 1: int, 2: ?string}> last write per cookie: value, expiry, domain */
     public array $written = [];
     public ?string $language = 'fr-FR,fr;q=0.9';
     public bool $sent = false;
@@ -23,9 +24,9 @@ final class TestAnalytics extends Analytics
     public ?string $remote = '203.0.113.5';
 
     protected function readCookie(string $name): ?string { return $this->cookies[$name] ?? null; }
-    protected function writeCookie(string $name, string $value, int $expires): void
+    protected function writeCookie(string $name, string $value, int $expires, ?string $domain = null): void
     {
-        $this->written[$name] = [$value, $expires];
+        $this->written[$name] = [$value, $expires, $domain];
         if ($expires > time()) $this->cookies[$name] = $value; else unset($this->cookies[$name]);
     }
     protected function headersSent(): bool { return $this->sent; }
@@ -85,12 +86,12 @@ test('writes the identity cookie once and reuses it', function () {
     $a = client();
     $id = $a->getInstallId();
     same($id, Analytics::installId($id));
-    same($id, $a->cookies['_vau']);
+    same($id, $a->cookies['__Host-vau']);
 
     $b = client();
     $b->cookies = $a->cookies;
     same($id, $b->getInstallId());
-    same(false, isset($b->written['_vau']));
+    same(false, isset($b->written['__Host-vau']));
 });
 
 test('measures nothing once the output has started and no cookie exists', function () {
@@ -117,7 +118,7 @@ test('an acceptance outranks the regime, in this request and the next', function
     $a->language = 'de-DE';
     $a->setOptedOut(false);
     same(true, $a->consentAnswer());
-    same('0', $a->cookies['_vau_off']);
+    same('0', $a->cookies['__Host-vau_off']);
     $a->track('page_view');
     $a->flush();
     same(1, count($a->bodies));
@@ -134,12 +135,109 @@ test('opposing drops the queue and deletes the identity cookie', function () {
     $a->track('page_view');
     $a->setOptedOut(true);
     same(false, $a->consentAnswer());
-    same('1', $a->cookies['_vau_off']);
-    same(false, isset($a->cookies['_vau']));
+    same('1', $a->cookies['__Host-vau_off']);
+    same(false, isset($a->cookies['__Host-vau']));
     $a->track('page_view');
     $a->flush();
     same([], $a->bodies);
     same(null, $a->getInstallId());
+});
+
+test('default cookie names carry the __Host- prefix and no domain', function () {
+    $a = client();
+    $a->getInstallId();
+    $a->setOptedOut(false);
+    same(['__Host-vau', '__Host-vau_off'], array_keys($a->written));
+    same(null, $a->written['__Host-vau'][2]);
+    same(null, $a->written['__Host-vau_off'][2]);
+});
+
+test('cookieDomain switches the default names to __Secure- and sets the domain', function () {
+    $a = client(['web' => ['cookieDomain' => 'example.com']]);
+    $a->getInstallId();
+    $a->setOptedOut(false);
+    same(['__Secure-vau', '__Secure-vau_off'], array_keys($a->written));
+    same('example.com', $a->written['__Secure-vau'][2]);
+    same('example.com', $a->written['__Secure-vau_off'][2]);
+});
+
+test('an explicit cookie name is kept as is, and still gets the domain', function () {
+    $a = client(['web' => ['cookieName' => 'mine', 'optOutCookieName' => 'mine_off', 'cookieDomain' => 'example.com']]);
+    $a->getInstallId();
+    $a->setOptedOut(false);
+    same(['mine', 'mine_off'], array_keys($a->written));
+    same('example.com', $a->written['mine'][2]);
+    same('example.com', $a->written['mine_off'][2]);
+
+    $b = client(['web' => ['cookieName' => 'mine']]);
+    $b->getInstallId();
+    same(['mine'], array_keys($b->written));
+    same(null, $b->written['mine'][2]);
+});
+
+test('migrates a legacy consent answer to the new name', function () {
+    foreach (['0' => true, '1' => false] as $value => $answer) {
+        $a = client(['web' => ['cookieDomain' => 'example.com']]);
+        $a->cookies['_vau_off'] = (string)$value;
+        same($answer, $a->consentAnswer());
+        same($answer, $a->consentAnswer());
+        same((string)$value, $a->cookies['__Secure-vau_off']);
+        same('example.com', $a->written['__Secure-vau_off'][2]);
+        same(true, $a->written['__Secure-vau_off'][1] > time() + 389 * 86400);
+        same(false, isset($a->cookies['_vau_off']));
+        same(['', 1, null], $a->written['_vau_off']);
+    }
+});
+
+test('migrates a legacy install id: same id, new cookie, legacy deleted', function () {
+    $legacy = '11111111-0000-4000-8000-000011111111';
+    $a = client();
+    $a->cookies['_vau'] = $legacy;
+    same($legacy, $a->getInstallId());
+    same($legacy, $a->cookies['__Host-vau']);
+    same(true, $a->written['__Host-vau'][1] > time() + 389 * 86400);
+    same(null, $a->written['__Host-vau'][2]);
+    same(false, isset($a->cookies['_vau']));
+    same(['', 1, null], $a->written['_vau']);
+});
+
+test('uses the legacy values without rewriting once the output has started', function () {
+    $legacy = '11111111-0000-4000-8000-000011111111';
+    $a = client();
+    $a->sent = true;
+    $a->cookies['_vau'] = $legacy;
+    $a->cookies['_vau_off'] = '0';
+    same(true, $a->consentAnswer());
+    same($legacy, $a->getInstallId());
+    same([], $a->written);
+    same('0', $a->cookies['_vau_off']);
+});
+
+test('does not migrate when the effective name is the legacy one', function () {
+    $a = client(['web' => ['cookieName' => '_vau', 'optOutCookieName' => '_vau_off']]);
+    $a->cookies['_vau_off'] = '1';
+    same(false, $a->consentAnswer());
+    same([], $a->written);
+});
+
+test('a new cookie outranks the legacy one', function () {
+    $a = client();
+    $a->cookies['__Host-vau_off'] = '0';
+    $a->cookies['_vau_off'] = '1';
+    same(true, $a->consentAnswer());
+    same([], $a->written);
+});
+
+test('opposing deletes the identity cookie under the new and the legacy name', function () {
+    $a = client(['web' => ['cookieDomain' => 'example.com']]);
+    $a->cookies['__Secure-vau'] = '11111111-0000-4000-8000-000011111111';
+    $a->cookies['_vau'] = '22222222-0000-4000-8000-000022222222';
+    $a->setOptedOut(true);
+    same(['', 1, 'example.com'], $a->written['__Secure-vau']);
+    same(['', 1, null], $a->written['_vau']);
+    same(false, isset($a->cookies['__Secure-vau']));
+    same(false, isset($a->cookies['_vau']));
+    same('1', $a->cookies['__Secure-vau_off']);
 });
 
 test('requiresPriorConsentForLocale wins over requiresPriorConsent', function () {

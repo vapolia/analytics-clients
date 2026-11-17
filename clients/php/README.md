@@ -34,9 +34,17 @@ The events are emitted by the server. No script is added to the pages.
 
 | | |
 |---|---|
-| **Install id** | A first-party cookie (`_vau`, HttpOnly, Secure, SameSite=Lax) that the server sets once. It expires after 13 months and is never extended. |
+| **Install id** | A first-party cookie (`__Host-vau`, HttpOnly, Secure, SameSite=Lax) that the server sets once. It expires after 13 months and is never extended. |
 | **Country** | The region of the first `Accept-Language` tag, never an IP geolocation. |
-| **Opposition** | A second cookie, `_vau_off`: `1` opposed, `0` accepted, absent unanswered. |
+| **Opposition** | A second cookie, `__Host-vau_off`: `1` opposed, `0` accepted, absent unanswered. |
+
+With `web.cookieDomain` set, the cookies are named `__Secure-vau` and `__Secure-vau_off` and carry that domain, so subdomains share them.
+A name set with `cookieName` or `optOutCookieName` is used as is.
+Every write and every deletion of a cookie uses the same domain.
+
+Earlier versions named the cookies `_vau` and `_vau_off`.
+When the new cookie is absent, the legacy value is read and the cookie is rewritten under the new name, with a full lifetime, and the legacy cookie is deleted.
+When the output has already started, the legacy value is used for the request and the rewrite waits for the next one.
 
 A cookie can only be written before the output starts. A visitor seen for the first time after the output started is measured from the next request.
 A CLI script or a cron job has no visitor and is not measured.
@@ -53,8 +61,8 @@ While the visitor has not answered, `isOptedOut()` reads, in this order:
 **The built-in default must not be taken as a legal basis: the choice stays yours, and so does the liability for it.**
 
 Until the visitor accepts under a prior-consent regime, no cookie is written and nothing is sent.
-Accepting writes `_vau_off=0`, which outranks the regime on the next requests.
-Refusing writes `_vau_off=1`, deletes `_vau` and drops the visitor's queued events.
+Accepting writes `__Host-vau_off=0`, which outranks the regime on the next requests.
+Refusing writes `__Host-vau_off=1`, deletes `__Host-vau` and `_vau` and drops the visitor's queued events.
 
 ```php
 if ($analytics->consentAnswer() === null)
@@ -104,7 +112,7 @@ CodeIgniter buffers the output until the controller returns, so the cookie can b
 | `new Analytics(array $options)` | One per request. |
 | `track(string $name, array $props = [])` | Props are scalars: string (≤64 chars), int, finite float, bool. Max 12 per event. Never throws. |
 | `flush()` | Sends what is queued, now. Called on its own when the request ends. |
-| `setOptedOut(bool)` / `isOptedOut()` | The right of opposition, stored in `_vau_off`. Call `setOptedOut` before any output. |
+| `setOptedOut(bool)` / `isOptedOut()` | The right of opposition, stored in `__Host-vau_off`. Call `setOptedOut` before any output. |
 | `consentAnswer(): ?bool` | True accepted, false refused, null not answered yet. |
 | `getInstallId(): ?string` | The visitor's id, created when missing. Null when opted out or outside a request. |
 | `getCountry(): ?string` | The region read from `Accept-Language`. |
@@ -132,8 +140,9 @@ The names are the ones of the other clients. Durations are in milliseconds.
 | `advanced` | `logger` | `function (string $level, string $message)`, default `error_log` |
 | `advanced` | `onError` | `function (?Throwable $error, string $reason, bool $permanent)`, called on every loss |
 | `advanced` | `sendOnShutdown` | `true`. False leaves the send to your own `flush()` call. |
-| `web` | `cookieName` | `_vau` |
-| `web` | `optOutCookieName` | `_vau_off` |
+| `web` | `cookieDomain` | none. Set it to share the cookies across subdomains, for example `example.com`. |
+| `web` | `cookieName` | `__Host-vau`, or `__Secure-vau` with `cookieDomain` |
+| `web` | `optOutCookieName` | `__Host-vau_off`, or `__Secure-vau_off` with `cookieDomain` |
 | `web` | `requiresPriorConsentForLocale` | none |
 | `web` | `timeZoneOffset` | none. A function returning the visitor's offset in minutes east of UTC, for example from a cookie set by a script. |
 | `web` | `clientAddress` | `$_SERVER['REMOTE_ADDR']`. A function returning the visitor's IP address, for a site behind a reverse proxy. |

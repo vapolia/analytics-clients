@@ -31,7 +31,18 @@ export interface RelayOptions {
   maxEventsPerRequest?: number;
   /** A body larger than this is dropped whole. Default 64 KB. */
   maxBodyBytes?: number;
+  /**
+   * Events relayed per `rateWindowMs` for one visitor address, an IPv6 address counting as its /64.
+   * Beyond it the events are dropped until the window ends. Default 30. Zero disables it. A visitor
+   * with no known address is not limited: see the `clientAddress` web option.
+   */
+  maxEventsPerAddress?: number;
+  /** The window `maxEventsPerAddress` counts in. Default one minute. */
+  rateWindowMs?: number;
 }
+
+// Addresses counted in one window. Beyond it a new address is refused until the window ends.
+const MAX_ADDRESSES = 100_000;
 
 type Endpoint = 'state' | 'consent' | 'events';
 
@@ -43,6 +54,10 @@ export class Relay {
   private readonly events: Map<string, RelayEvent>;
   private readonly maxEvents: number;
   private readonly maxBytes: number;
+  private readonly maxPerAddress: number;
+  private readonly rateWindowMs: number;
+  private readonly rateCounts = new Map<string, number>();
+  private rateWindowStart = 0;
 
   constructor(
     private readonly web: WebAnalytics,
@@ -53,6 +68,8 @@ export class Relay {
     );
     this.maxEvents = options.maxEventsPerRequest ?? 20;
     this.maxBytes = options.maxBodyBytes ?? 64 * 1024;
+    this.maxPerAddress = options.maxEventsPerAddress ?? 30;
+    this.rateWindowMs = options.rateWindowMs ?? 60_000;
   }
 
   /** A node:http handler, also an Express or Connect middleware: an unknown path calls `next`. */
@@ -103,14 +120,34 @@ export class Relay {
     return 204;
   }
 
+/** Counts one event for the address, and answers whether it is within the ceiling. */
+  private withinRate(address: string | undefined): boolean {
+    if (this.maxPerAddress <= 0 || address === undefined) return true;
+
+    const now = Date.now();
+    if (now - this.rateWindowStart >= this.rateWindowMs) {
+      this.rateWindowStart = now;
+      this.rateCounts.clear();
+    }
+
+    const count = this.rateCounts.get(address);
+    if (count === undefined && this.rateCounts.size >= MAX_ADDRESSES) return false;
+    if ((count ?? 0) >= this.maxPerAddress) return false;
+
+    this.rateCounts.set(address, (count ?? 0) + 1);
+    return true;
+  }
+
   /** Always 204: a beacon reads no answer. */
   private async track(visitor: Visitor, body: unknown, request: WebRequest): Promise<number> {
     const items = Array.isArray(body) ? body.slice(0, this.maxEvents) : isObject(body) ? [body] : [];
+    const address = rateKey(visitor.clientAddress);
 
     for (const item of items) {
       if (!isObject(item) || typeof item.name !== 'string') continue;
       const relayEvent = this.events.get(item.name);
       if (relayEvent === undefined) continue;
+      if (!this.withinRate(address)) break;
 
       const sent: Record<string, PropValue> = {};
       if (isObject(item.props)) {
@@ -142,6 +179,24 @@ export class Relay {
 
     return 204;
   }
+}
+
+/** The key one address is counted under: the address itself, or the /64 of an IPv6 address. */
+function rateKey(address: string | undefined): string | undefined {
+  const text = address?.trim().toLowerCase();
+  if (!text) return undefined;
+  // IPv4, or IPv4 mapped into IPv6.
+  if (text.includes('.')) return text.slice(text.lastIndexOf(':') + 1);
+  if (!text.includes(':')) return text;
+
+  const [head = '', tail] = text.split('::');
+  const first = head === '' ? [] : head.split(':');
+  const last = tail === undefined || tail === '' ? [] : tail.split(':');
+  const groups = tail === undefined ? first : [...first, ...Array<string>(Math.max(0, 8 - first.length - last.length)).fill('0'), ...last];
+  return groups
+    .slice(0, 4)
+    .map((group) => group.replace(/^0+(?=.)/, ''))
+    .join(':');
 }
 
 function isKeyList(value: readonly string[] | RelayEvent): value is readonly string[] {

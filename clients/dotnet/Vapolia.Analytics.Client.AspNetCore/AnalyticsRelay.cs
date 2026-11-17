@@ -33,6 +33,61 @@ public sealed class AnalyticsRelayOptions
     public int MaxBodyBytes { get; set; } = 64 * 1024;
 
     /// <summary>
+    /// Events relayed per <see cref="RateWindow"/> for one visitor address, an IPv6 address counting as its /64. Beyond it the events
+    /// are dropped until the window ends. Zero disables it, for a site with a rate limiter of its own in front of the relay. A request
+    /// with no address is not limited.
+    /// </summary>
+    /// <remarks>
+    /// The address is <c>Connection.RemoteIpAddress</c>: behind a proxy, the <c>ForwardedHeaders</c> middleware sets it. It is held in
+    /// memory for one window, per process, and never logged.
+    /// </remarks>
+    public int MaxEventsPerAddress { get; set; } = 30;
+
+    /// <summary>The window <see cref="MaxEventsPerAddress"/> counts in.</summary>
+    public TimeSpan RateWindow { get; set; } = TimeSpan.FromMinutes(1);
+
+    internal TimeProvider Time { get; set; } = TimeProvider.System;
+
+    readonly Lock rateGate = new();
+    readonly Dictionary<string, int> rateCounts = new(StringComparer.Ordinal);
+    DateTimeOffset rateWindowStart;
+
+    // Addresses counted in one window. Beyond it a new address is refused until the window ends.
+    const int MaxAddresses = 100_000;
+
+    /// <summary>Counts one event for <paramref name="address"/>, and answers whether it is within the ceiling.</summary>
+    internal bool WithinRate(System.Net.IPAddress? address)
+    {
+        if (MaxEventsPerAddress <= 0 || address is null)
+            return true;
+
+        var key = address switch
+        {
+            { IsIPv4MappedToIPv6: true } => address.MapToIPv4().ToString(),
+            { AddressFamily: System.Net.Sockets.AddressFamily.InterNetworkV6 } => Convert.ToHexString(address.GetAddressBytes(), 0, 8),
+            _ => address.ToString(),
+        };
+
+        var now = Time.GetUtcNow();
+        lock (rateGate)
+        {
+            if (now - rateWindowStart >= RateWindow)
+            {
+                rateWindowStart = now;
+                rateCounts.Clear();
+            }
+
+            if (!rateCounts.TryGetValue(key, out var count) && rateCounts.Count >= MaxAddresses)
+                return false;
+            if (count >= MaxEventsPerAddress)
+                return false;
+
+            rateCounts[key] = count + 1;
+            return true;
+        }
+    }
+
+    /// <summary>
     /// Accepts the event <paramref name="name"/> with the props <paramref name="keys"/>.
     /// </summary>
     public RelayEvent Event(string name, params string[] keys)
@@ -88,7 +143,7 @@ public static class AnalyticsRelayExtensions
     ///     o.Prop("duration_s", p => new(p.Value is double or long ? Math.Clamp(Convert.ToDouble(p.Value), 0, 86400) : null));
     ///     o.Event("content_viewed", "content_type", "content_id", "duration_s");
     ///     o.Event("route_shared", "content_id").With("content_type", "route");
-    /// }).RequireRateLimiting("analytics");
+    /// });
     /// </code>
     /// </summary>
     public static RouteGroupBuilder MapAnalyticsRelay(this IEndpointRouteBuilder endpoints, string prefix, Action<AnalyticsRelayOptions> configure)
@@ -158,6 +213,9 @@ public static class AnalyticsRelayExtensions
                 || nameElement.GetString() is not { } name
                 || !options.Events.TryGetValue(name, out var relayEvent))
                 continue;
+
+            if (!options.WithinRate(context.Connection.RemoteIpAddress))
+                break;
 
             var sent = new Dictionary<string, object?>(StringComparer.Ordinal);
             if (item.TryGetProperty("props", out var propsElement) && propsElement.ValueKind == JsonValueKind.Object)
